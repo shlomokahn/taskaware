@@ -1,15 +1,18 @@
 # 1. החרגת ספריות וקבצים שנוצרו אוטומטית (Dependencies)
-# ************** CRITICAL: DO NOT COMMIT NODE_MODULES **************
 /node_modules
-/backend/node_modules  <-- הוסף את השורה הזו אם התקנת בתוך backend
+/backend/node_modules 
+.venv
+venv
+*.pyc
+__pycache__
 
 # 2. קבצי לוגים וקובצי פיתוח
 npm-debug.log*
 yarn-debug.log*
 npm-error.log*
 .DS_Store
+*.log
 
 # 3. החרגת משתני סביבה וסודות (CRITICAL SECURITY)
-# החרגה של כל קובץ המתחיל ב-.env, כולל.env,.env.development, וכו'.
 .env
 .env.*
