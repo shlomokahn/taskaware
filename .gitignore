@@ -1,6 +1,7 @@
 # 1. החרגת ספריות וקבצים שנוצרו אוטומטית (Dependencies)
 # ************** CRITICAL: DO NOT COMMIT NODE_MODULES **************
-/backend/node_modules
+/node_modules
+/backend/node_modules  <-- הוסף את השורה הזו אם התקנת בתוך backend
 
 # 2. קבצי לוגים וקובצי פיתוח
 npm-debug.log*
