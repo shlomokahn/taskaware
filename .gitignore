@@ -1,0 +1,14 @@
+# 1. החרגת ספריות וקבצים שנוצרו אוטומטית (Dependencies)
+# ************** CRITICAL: DO NOT COMMIT NODE_MODULES **************
+/node_modules
+
+# 2. קבצי לוגים וקובצי פיתוח
+npm-debug.log*
+yarn-debug.log*
+npm-error.log*
+.DS_Store
+
+# 3. החרגת משתני סביבה וסודות (CRITICAL SECURITY)
+# החרגה של כל קובץ המתחיל ב-.env, כולל.env,.env.development, וכו'.
+.env
+.env.*
