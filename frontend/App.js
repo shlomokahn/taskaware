@@ -13,13 +13,13 @@ export default function App() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#759774ff',
+    backgroundColor: '#ced7ceff',
     alignItems: 'center',
     justifyContent: 'center',
   },
   text: {
     fontSize: 32, // גודל פונט גדול
     fontWeight: 'bold',
-    color: '#782727ff',
+    color: '#411616ff',
   },
 });
