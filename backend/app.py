@@ -1,4 +1,3 @@
-# backend/app.py
 import os
 import json
 from datetime import datetime
@@ -7,15 +6,9 @@ from pymongo import MongoClient, DESCENDING
 from bson.objectid import ObjectId
 from dotenv import load_dotenv
 
-# טוען משתני סביבה מקובץ.env מקומי (יעיל רק בפיתוח)
 load_dotenv() 
 
-# --- 1. קונפיגורציה וחיבור ל-MongoDB Atlas ---
-# MONGO_URI יילקח ממשתני הסביבה (process.env ב-Node)
-# הערך נלקח מ-Render בפרודקשן
-MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017/") # ברירת מחדל לפיתוח
-
-# יצירת מופע של Flask (תחליף ל-Express)
+MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017/")
 app = Flask(__name__)
 
 # הגדרת אובייקט החיבור ל-DB
