@@ -1,3 +1,8 @@
+/**
+ * TaskAware Frontend (Expo/React Native)
+ * - מושך משימות מה-API, יוצר משימות חדשות, ומסמן כבוצע.
+ * - כתובת ה-API נקבעת מ-EXPO_PUBLIC_API_BASE או ברירת המחדל כאן.
+ */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -22,8 +27,10 @@ export default function App() {
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState('');
 
+  // לוגיקה מחושבת: רשימה ריקה? משמש לסגנון/תצוגה.
   const listEmpty = useMemo(() => tasks.length === 0, [tasks]);
 
+  // שליפת כל המשימות מהשרת
   const fetchTasks = useCallback(async () => {
     setError('');
     try {
@@ -40,6 +47,7 @@ export default function App() {
     }
   }, []);
 
+  // שליפה ראשונית בעת עלייה
   useEffect(() => {
     fetchTasks();
   }, [fetchTasks]);
@@ -49,6 +57,7 @@ export default function App() {
     fetchTasks();
   }, [fetchTasks]);
 
+  // יצירת משימה חדשה
   const createTask = useCallback(async () => {
     const title = newTitle.trim();
     if (!title) {
@@ -76,6 +85,7 @@ export default function App() {
     }
   }, [newTitle]);
 
+  // סימון/ביטול השלמת משימה
   const toggleTask = useCallback(async (task) => {
     const next = !task.isCompleted;
     try {
@@ -93,6 +103,7 @@ export default function App() {
     }
   }, []);
 
+  // רינדור שורה אחת של משימה
   const renderItem = ({ item }) => (
     <TouchableOpacity
       style={styles.taskRow}
