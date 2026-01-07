@@ -15,6 +15,8 @@ import {
   View,
 } from 'react-native';
 
+import { useLocationSync } from './src/useLocationSync.js';
+
 // ניתן להגדיר בקובץ .env את EXPO_PUBLIC_API_BASE
 // לדוגמה: EXPO_PUBLIC_API_BASE=http://localhost:3000
 const API_BASE = 'https://taskaware-backend.onrender.com';
@@ -27,6 +29,7 @@ export default function App() {
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState('');
 
+const { location } = useLocationSync(API_BASE);
   // לוגיקה מחושבת: רשימה ריקה? משמש לסגנון/תצוגה.
   const listEmpty = useMemo(() => tasks.length === 0, [tasks]);
 
