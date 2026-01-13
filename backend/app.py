@@ -175,5 +175,29 @@ def update_task(current_user, task_id):
     except Exception as e:
         return jsonify({"msg": "Update failed", "error": str(e)}), 400
 
+@app.route('/api/user/location', methods=['POST'])
+@token_required
+def update_user_location(current_user):
+    data = request.json
+    lat = data.get('latitude')
+    lng = data.get('longitude')
+    
+    if lat is None or lng is None:
+        return jsonify({"msg": "Missing coordinates"}), 400
+        
+    # עדכון המיקום האחרון של המשתמש בפורמט GeoJSON
+    users_collection.update_one(
+        {"_id": current_user['_id']},
+        {"$set": {
+            "last_location": {
+                "type": "Point",
+                "coordinates": [lng, lat] # MongoDB דורש קודם Longitude
+            },
+            "last_updated": datetime.datetime.now(datetime.timezone.utc)
+        }}
+    )
+    return jsonify({"msg": "Location updated"}), 200
+
+
 if __name__ == '__main__':
     app.run(debug=True, port=3000)
