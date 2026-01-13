@@ -34,8 +34,7 @@ export default function App() {
 
     // הפעלת סנכרון המיקום (כפי שהיה במקור)
     // הערה: ה-Hook הזה ישתמש ב-API_BASE כדי לעדכן את המיקום בשרת
-    const { location } = useLocationSync(API_BASE);
-
+    const { location } = useLocationSync(API_BASE, token);
     // 1. בדיקת טוקן שמור בטעינה ראשונה
     useEffect(() => {
         const loadToken = async () => {
