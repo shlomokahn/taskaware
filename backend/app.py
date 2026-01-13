@@ -148,5 +148,32 @@ def create_task(current_user):
 def health_check():
     return jsonify(status="OK", db="Connected"), 200
 
+
+# עדכון משימה (למשל סימון כבוצע)
+@app.route('/api/tasks/<task_id>', methods=['PUT'])
+@token_required
+def update_task(current_user, task_id):
+    try:
+        data = request.json
+        # מעדכנים רק את השדות ששלחנו ב-body
+        update_data = {}
+        if 'isCompleted' in data:
+            update_data['isCompleted'] = data['isCompleted']
+        if 'title' in data:
+            update_data['title'] = data['title']
+
+        result = tasks_collection.find_one_and_update(
+            {"_id": ObjectId(task_id), "user_id": current_user['_id']},
+            {"$set": update_data},
+            return_document=True
+        )
+        
+        if not result:
+            return jsonify({"msg": "Task not found"}), 404
+            
+        return jsonify(mongo_to_json(result)), 200
+    except Exception as e:
+        return jsonify({"msg": "Update failed", "error": str(e)}), 400
+
 if __name__ == '__main__':
     app.run(debug=True, port=3000)
