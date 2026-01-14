@@ -62,3 +62,16 @@ app-example
 # generated native folders
 /ios
 /android
+
+# Visual Studio files
+.vs/
+bin/
+obj/
+*.user
+*.suo
+
+# Python files
+__pycache__/
+*.pyc
+.env
+venv/

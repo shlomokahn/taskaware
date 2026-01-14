@@ -9,11 +9,9 @@ export const useLocationSync = (apiBaseUrl, token) => {
         let intervalId = null;
 
         const startLoop = async () => {
-            // אם אין טוקן, אין טעם לנסות לשלוח לשרת
             if (!token) return;
 
             try {
-                // 1. בקשת הרשאה
                 let { status } = await Location.requestForegroundPermissionsAsync();
                 if (status !== 'granted') {
                     console.log('❌ אין הרשאת מיקום');
@@ -22,7 +20,6 @@ export const useLocationSync = (apiBaseUrl, token) => {
 
                 console.log('✅ סנכרון מיקום פעיל (כל 30 שניות)');
 
-                // 2. לולאת עדכון
                 intervalId = setInterval(async () => {
                     try {
                         const currentLocation = await Location.getCurrentPositionAsync({
@@ -31,7 +28,6 @@ export const useLocationSync = (apiBaseUrl, token) => {
 
                         setLocation(currentLocation);
 
-                        // שליחה לשרת
                         if (apiBaseUrl && token) {
                             sendLocationToBackend(apiBaseUrl, token, currentLocation.coords);
                         }
@@ -50,7 +46,7 @@ export const useLocationSync = (apiBaseUrl, token) => {
         return () => {
             if (intervalId) clearInterval(intervalId);
         };
-    }, [apiBaseUrl, token]); // הלולאה תתחיל מחדש אם הטוקן משתנה (למשל אחרי לוגין)
+    }, [apiBaseUrl, token]); 
 
     const sendLocationToBackend = async (url, userToken, coords) => {
         try {
@@ -58,7 +54,7 @@ export const useLocationSync = (apiBaseUrl, token) => {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'x-access-token': userToken // הוספת הטוקן לזיהוי המשתמש בשרת
+                    'x-access-token': userToken 
                 },
                 body: JSON.stringify({
                     latitude: coords.latitude,
