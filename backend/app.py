@@ -12,6 +12,7 @@ load_dotenv()
 
 app = Flask(__name__)
 
+# תיקון: הגדרת מפתח סודי בתוך אובייקט הקונפיגורציה
 app.config['SECRET_KEY'] = os.getenv("SECRET_KEY", "taskaware_default_secret_key")
 
 # --- 1. Database Connection ---
@@ -54,6 +55,7 @@ def token_required(f):
             return jsonify({'message': 'Authentication token is missing!'}), 401
             
         try:
+            # תיקון: שימוש ב-app.config['SECRET_KEY'] והגדרת אלגוריתם
             data = jwt.decode(token, app.config['SECRET_KEY'], algorithms=["HS256"])
             current_user = users_collection.find_one({"_id": ObjectId(data['user_id'])})
             if not current_user:
@@ -66,7 +68,7 @@ def token_required(f):
 
 # --- 3. Endpoints ---
 
-@app.route('/api/signup', methods=['POST']) 
+@app.route('/api/signup', methods=['POST']) # תיקון: הוספת מתודה
 def signup():
     data = request.json
     username = data.get('username')
@@ -89,7 +91,7 @@ def signup():
     except:
         return jsonify({"msg": "Username already exists"}), 409
 
-@app.route('/api/login', methods=['POST']) 
+@app.route('/api/login', methods=['POST']) # תיקון: הוספת מתודה
 def login():
     auth = request.json
     if not auth or not auth.get('username') or not auth.get('password'):
@@ -100,6 +102,7 @@ def login():
         return make_response('User not found', 401)
 
     if bcrypt.checkpw(auth.get('password').encode('utf-8'), user['password']):
+        # תיקון: שימוש במפתח הנכון מהקונפיג
         token = jwt.encode({
             'user_id': str(user['_id']),
             'exp': datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=24)
@@ -109,7 +112,7 @@ def login():
 
     return make_response('Invalid credentials', 401)
 
-@app.route('/api/tasks', methods=['GET']) 
+@app.route('/api/tasks', methods=['GET']) # תיקון: מתודת GET
 @token_required
 def get_tasks(current_user):
     try:
@@ -119,7 +122,7 @@ def get_tasks(current_user):
     except Exception as e:
         return jsonify({"msg": "Failed to fetch tasks", "error": str(e)}), 500
 
-@app.route('/api/tasks', methods=['POST']) 
+@app.route('/api/tasks', methods=['POST']) # תיקון: מתודת POST
 @token_required
 def create_task(current_user):
     data = request.json
@@ -146,11 +149,13 @@ def health_check():
     return jsonify(status="OK", db="Connected"), 200
 
 
+# עדכון משימה (למשל סימון כבוצע)
 @app.route('/api/tasks/<task_id>', methods=['PUT'])
 @token_required
 def update_task(current_user, task_id):
     try:
         data = request.json
+        # מעדכנים רק את השדות ששלחנו ב-body
         update_data = {}
         if 'isCompleted' in data:
             update_data['isCompleted'] = data['isCompleted']
@@ -180,12 +185,13 @@ def update_user_location(current_user):
     if lat is None or lng is None:
         return jsonify({"msg": "Missing coordinates"}), 400
         
+    # עדכון המיקום האחרון של המשתמש בפורמט GeoJSON
     users_collection.update_one(
         {"_id": current_user['_id']},
         {"$set": {
             "last_location": {
                 "type": "Point",
-                "coordinates": [lng, lat] 
+                "coordinates": [lng, lat] # MongoDB דורש קודם Longitude
             },
             "last_updated": datetime.datetime.now(datetime.timezone.utc)
         }}

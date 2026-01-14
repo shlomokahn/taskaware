@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+// ייבוא ה-Hook של המיקום כפי שהיה במקור
 import { useLocationSync } from './src/useLocationSync.js';
 
 const API_BASE = 'https://taskaware-backend.onrender.com';
@@ -25,12 +26,16 @@ export default function App() {
     const [creating, setCreating] = useState(false);
     const [error, setError] = useState('');
 
+    // States לניהול המשתמש והתחברות
     const [token, setToken] = useState(null);
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
     const [isLoginMode, setIsLoginMode] = useState(true);
 
+    // הפעלת סנכרון המיקום (כפי שהיה במקור)
+    // הערה: ה-Hook הזה ישתמש ב-API_BASE כדי לעדכן את המיקום בשרת
     const { location } = useLocationSync(API_BASE, token);
+    // 1. בדיקת טוקן שמור בטעינה ראשונה
     useEffect(() => {
         const loadToken = async () => {
             const savedToken = await AsyncStorage.getItem('userToken');
@@ -40,6 +45,7 @@ export default function App() {
         loadToken();
     }, []);
 
+    // 2. פונקציית התחברות / הרשמה
     const handleAuth = async () => {
         if (!username || !password) {
             setError('נא להזין שם משתמש וסיסמה');
@@ -73,6 +79,7 @@ export default function App() {
         }
     };
 
+    // 3. שליפת משימות מהשרת (עם Token)
     const fetchTasks = useCallback(async () => {
         if (!token) return;
         setError('');
@@ -81,7 +88,7 @@ export default function App() {
                 headers: { 'x-access-token': token }
             });
             if (res.status === 401) {
-                setToken(null); 
+                setToken(null); // טוקן לא תקף - חזרה ללוגין
                 return;
             }
             const data = await res.json();
@@ -103,6 +110,7 @@ export default function App() {
         fetchTasks();
     }, [fetchTasks]);
 
+    // 4. יצירת משימה חדשה (עם Token)
     const createTask = useCallback(async () => {
         const title = newTitle.trim();
         if (!title || !token) return;
@@ -129,6 +137,7 @@ export default function App() {
         }
     }, [newTitle, token]);
 
+    // 5. סימון משימה כבוצעה
     const toggleTask = useCallback(async (task) => {
         const next = !task.isCompleted;
         try {
@@ -149,6 +158,7 @@ export default function App() {
 
     const listEmpty = useMemo(() => tasks.length === 0, [tasks]);
 
+    // --- תצוגת מסך התחברות (בסגנון המקורי שלך) ---
     if (!token) {
         return (
             <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.container}>
@@ -184,6 +194,7 @@ export default function App() {
         );
     }
 
+    // --- תצוגת המשימות הראשית (העיצוב המקורי שלך) ---
     return (
         <View style={styles.container}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
