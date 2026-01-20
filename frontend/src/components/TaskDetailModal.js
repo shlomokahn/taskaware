@@ -10,7 +10,7 @@ import {
 
 const { width } = Dimensions.get('window');
 
-export default function TaskDetailModal({ visible, task, onClose, onToggle, onDelete }) {
+export default function TaskDetailModal({ visible, task, onClose, onToggle, onDelete, onEdit }) {
     if (!task) return null;
 
     return (
@@ -51,6 +51,12 @@ export default function TaskDetailModal({ visible, task, onClose, onToggle, onDe
                                 {task.isCompleted ? 'סמן כלא בוצע' : 'סמן כבוצע'}
                             </Text>
                         </TouchableOpacity>
+                        <TouchableOpacity
+                            style={[styles.btn, styles.btnEdit]}
+                            onPress={() => onEdit(task)}
+                        >
+                            <Text style={styles.btnTextWhite}>ערוך משימה ✏️</Text>
+                        </TouchableOpacity>
 
                         <TouchableOpacity
                             style={[styles.btn, styles.btnDelete]}
@@ -61,6 +67,7 @@ export default function TaskDetailModal({ visible, task, onClose, onToggle, onDe
                         >
                             <Text style={styles.btnTextWhite}>מחק משימה 🗑️</Text>
                         </TouchableOpacity>
+                        
                     </View>
 
                     {/* כפתור סגירה תחתון */}
@@ -137,6 +144,7 @@ const styles = StyleSheet.create({
     btnFill: { backgroundColor: '#10b981' },
     btnOutline: { backgroundColor: 'transparent' },
     btnDelete: { backgroundColor: '#ef4444' },
+    btnEdit: { backgroundColor: '#3b82f6' },
     btnText: { fontSize: 16, fontWeight: '600' },
     btnTextWhite: { fontSize: 16, fontWeight: '600', color: '#fff' },
     textWhite: { color: '#fff' },

@@ -14,8 +14,9 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useLocationSync } from './src/useLocationSync.js';
 
-// --- ייבוא המודל החדש ---
+// --- ייבוא המודלים ---
 import TaskDetailModal from './src/components/TaskDetailModal';
+import EditTask from './src/EditTask';
 
 const API_BASE = 'https://taskaware-backend.onrender.com';
 
@@ -29,6 +30,7 @@ export default function App() {
 
     // State לניהול המשימה שנבחרה להצגה במודל
     const [selectedTask, setSelectedTask] = useState(null);
+    const [editingTask, setEditingTask] = useState(null);
 
     const [token, setToken] = useState(null);
     const [username, setUsername] = useState('');
@@ -180,6 +182,33 @@ export default function App() {
         }
     }, [token]);
 
+    // עדכון כותרת משימה
+    const updateTaskTitle = useCallback(async (taskId, newTitle) => {
+        try {
+            const res = await fetch(`${API_BASE}/api/tasks/${taskId}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-access-token': token
+                },
+                body: JSON.stringify({ title: newTitle }),
+            });
+            if (!res.ok) throw new Error('עדכון נכשל');
+            const updated = await res.json();
+
+            // עדכון הרשימה הראשית
+            setTasks((prev) => prev.map((t) => (t._id === taskId ? updated : t)));
+
+            // עדכון המודל הפתוח אם הוא של המשימה הזו
+            if (selectedTask && selectedTask._id === taskId) {
+                setSelectedTask(updated);
+            }
+        } catch (err) {
+            console.error("Update Error", err);
+            throw err;
+        }
+    }, [token, selectedTask]);
+
     const listEmpty = useMemo(() => tasks.length === 0, [tasks]);
 
     // --- לוגין UI ---
@@ -266,7 +295,6 @@ export default function App() {
                 data={tasks}
                 keyExtractor={(item) => item._id}
                 renderItem={({ item }) => (
-                    // שינוי: לחיצה על השורה פותחת את המודל, לא עושה טוגל מידית
                     <TouchableOpacity
                         style={styles.taskRow}
                         onPress={() => setSelectedTask(item)}
@@ -281,7 +309,6 @@ export default function App() {
                                 {item.title}
                             </Text>
                         </View>
-                        {/* חץ קטן שרומז שאפשר להיכנס פנימה */}
                         <Text style={{ color: '#d1d5db' }}>‹</Text>
                     </TouchableOpacity>
                 )}
@@ -290,13 +317,22 @@ export default function App() {
                 ListEmptyComponent={<Text style={styles.emptyText}>הכל ריק... זמן לנוח? 🏝️</Text>}
             />
 
-            {/* --- כאן יושב המודל שקופץ כשבוחרים משימה --- */}
+            {/* --- מודל פרטי משימה --- */}
             <TaskDetailModal
                 visible={!!selectedTask}
                 task={selectedTask}
                 onClose={() => setSelectedTask(null)}
                 onToggle={toggleTask}
                 onDelete={deleteTask}
+                onEdit={setEditingTask}
+            />
+
+            {/* --- מודל עריכת משימה --- */}
+            <EditTask
+                visible={!!editingTask}
+                task={editingTask}
+                onClose={() => setEditingTask(null)}
+                onSave={updateTaskTitle}
             />
 
         </View>
