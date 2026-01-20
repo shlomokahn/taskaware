@@ -17,6 +17,18 @@ def get_tasks(current_user):
     except Exception as e:
         return jsonify({"msg": "Failed to fetch tasks", "error": str(e)}), 500
 
+
+@tasks_bp.route('/<task_id>', methods=['DELETE'])
+@token_required
+def delete_task(current_user, task_id):
+    try:
+        result = tasks_collection.delete_one({"_id": ObjectId(task_id), "user_id": current_user['_id']})
+        if result.deleted_count == 0:
+            return jsonify({"msg": "Task not found"}), 404
+        return jsonify({"msg": "Task deleted"}), 200
+    except Exception as e:
+        return jsonify({"msg": "Delete failed", "error": str(e)}), 400
+
 @tasks_bp.route('', methods=['POST'])
 @token_required
 def create_task(current_user):
