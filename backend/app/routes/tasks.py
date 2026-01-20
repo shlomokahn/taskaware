@@ -7,7 +7,7 @@ import datetime
 
 tasks_bp = Blueprint('tasks', __name__)
 
-@tasks_bp.route('/', methods=['GET'])
+@tasks_bp.route('', methods=['GET'])
 @token_required
 def get_tasks(current_user):
     try:
@@ -17,7 +17,7 @@ def get_tasks(current_user):
     except Exception as e:
         return jsonify({"msg": "Failed to fetch tasks", "error": str(e)}), 500
 
-@tasks_bp.route('/', methods=['POST'])
+@tasks_bp.route('', methods=['POST'])
 @token_required
 def create_task(current_user):
     data = request.json
