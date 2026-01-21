@@ -209,6 +209,16 @@ export default function App() {
         }
     }, [token, selectedTask]);
 
+    const startEditing = useCallback((task) => {
+        // 1. קודם כל סוגרים את המודל הנוכחי
+        setSelectedTask(null);
+
+        // 2. מחכים שהאנימציה של הסגירה תסתיים (500ms זה זמן בטוח לרוב המכשירים)
+        setTimeout(() => {
+            setEditingTask(task); // 3. פותחים את המודל החדש
+        }, 500);
+    }, []);
+
     const listEmpty = useMemo(() => tasks.length === 0, [tasks]);
 
     // --- לוגין UI ---
@@ -324,7 +334,7 @@ export default function App() {
                 onClose={() => setSelectedTask(null)}
                 onToggle={toggleTask}
                 onDelete={deleteTask}
-                onEdit={setEditingTask}
+                onEdit={startEditing}
             />
 
             {/* --- מודל עריכת משימה --- */}
