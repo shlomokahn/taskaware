@@ -55,22 +55,43 @@ def create_task(current_user):
 @token_required
 def update_task(current_user, task_id):
     try:
-        data = request.json
-        update_data = {}
-        if 'isCompleted' in data:
-            update_data['isCompleted'] = data['isCompleted']
-        if 'title' in data:
-            update_data['title'] = data['title']
-
-        result = tasks_collection.find_one_and_update(
-            {"_id": ObjectId(task_id), "user_id": current_user['_id']},
-            {"$set": update_data},
-            return_document=True
-        )
+        # 1. קבלת המידע מהבקשה
+        data = request.get_json()
         
-        if not result:
-            return jsonify({"msg": "Task not found"}), 404
+        # 2. הכנת אובייקט העדכון
+        # אנחנו בודקים מה נשלח ומעדכנים רק את זה
+        update_fields = {}
+        
+        if 'title' in data:
+            update_fields['title'] = data['title']
             
-        return jsonify(mongo_to_json(result)), 200
+        if 'isCompleted' in data:
+            update_fields['isCompleted'] = data['isCompleted']
+
+        # אם לא נשלח שום שדה רלוונטי
+        if not update_fields:
+            return jsonify({"msg": "No fields to update"}), 400
+
+        # 3. ביצוע העדכון ב-DB
+        # חשוב מאוד: הסינון לפי user_id מבטיח שמשתמש לא יעדכן משימה של מישהו אחר!
+        result = mongo.db.tasks.update_one(
+            {'_id': ObjectId(task_id), 'user_id': current_user['_id']},
+            {'$set': update_fields}
+        )
+
+        # 4. בדיקה אם המשימה נמצאה ועודכנה
+        if result.matched_count == 0:
+            return jsonify({"msg": "Task not found or unauthorized"}), 404
+
+        # 5. שליפת המשימה המעודכנת כדי להחזיר אותה ל-Frontend
+        updated_task = mongo.db.tasks.find_one({'_id': ObjectId(task_id)})
+        
+        # המרת ה-ObjectId למחרוזת (כדי שיהיה אפשר לשלוח כ-JSON)
+        updated_task['_id'] = str(updated_task['_id'])
+        updated_task['user_id'] = str(updated_task['user_id'])
+
+        return jsonify(updated_task), 200
+
     except Exception as e:
-        return jsonify({"msg": "Update failed", "error": str(e)}), 400
+        print(f"Error updating task: {e}")
+        return jsonify({"msg": "Update failed", "error": str(e)}), 500
