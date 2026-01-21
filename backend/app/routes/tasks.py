@@ -51,47 +51,68 @@ def create_task(current_user):
     
     return jsonify(mongo_to_json(new_task)), 201
 
-@tasks_bp.route('/<task_id>', methods=['PUT'])
+# --- עדכון סטטוס בלבד ---
+@tasks_bp.route('/<task_id>/status', methods=['PUT'])
 @token_required
-def update_task(current_user, task_id):
+def update_task_status(current_user, task_id):
     try:
-        # 1. קבלת המידע מהבקשה
         data = request.get_json()
         
-        # 2. הכנת אובייקט העדכון
-        # אנחנו בודקים מה נשלח ומעדכנים רק את זה
-        update_fields = {}
-        
-        if 'title' in data:
-            update_fields['title'] = data['title']
+        # וידוא שקיבלנו את השדה הנכון
+        if 'isCompleted' not in data:
+            return jsonify({"msg": "Missing field: isCompleted"}), 400
             
-        if 'isCompleted' in data:
-            update_fields['isCompleted'] = data['isCompleted']
+        new_status = data['isCompleted']
 
-        # אם לא נשלח שום שדה רלוונטי
-        if not update_fields:
-            return jsonify({"msg": "No fields to update"}), 400
-
-        # 3. ביצוע העדכון ב-DB
-        # חשוב מאוד: הסינון לפי user_id מבטיח שמשתמש לא יעדכן משימה של מישהו אחר!
+        # עדכון ב-DB
         result = mongo.db.tasks.update_one(
             {'_id': ObjectId(task_id), 'user_id': current_user['_id']},
-            {'$set': update_fields}
+            {'$set': {'isCompleted': new_status}}
         )
 
-        # 4. בדיקה אם המשימה נמצאה ועודכנה
         if result.matched_count == 0:
             return jsonify({"msg": "Task not found or unauthorized"}), 404
 
-        # 5. שליפת המשימה המעודכנת כדי להחזיר אותה ל-Frontend
+        # שליפת המשימה המעודכנת להחזרה
         updated_task = mongo.db.tasks.find_one({'_id': ObjectId(task_id)})
-        
-        # המרת ה-ObjectId למחרוזת (כדי שיהיה אפשר לשלוח כ-JSON)
         updated_task['_id'] = str(updated_task['_id'])
         updated_task['user_id'] = str(updated_task['user_id'])
 
         return jsonify(updated_task), 200
 
     except Exception as e:
-        print(f"Error updating task: {e}")
-        return jsonify({"msg": "Update failed", "error": str(e)}), 500
+        print(f"Error updating status: {e}")
+        return jsonify({"msg": "Update failed"}), 500
+
+
+# --- עדכון כותרת בלבד ---
+@tasks_bp.route('/<task_id>/title', methods=['PUT'])
+@token_required
+def update_task_title(current_user, task_id):
+    try:
+        data = request.get_json()
+        
+        if 'title' not in data or not data['title'].strip():
+            return jsonify({"msg": "Missing or empty title"}), 400
+            
+        new_title = data['title'].strip()
+
+        # עדכון ב-DB
+        result = mongo.db.tasks.update_one(
+            {'_id': ObjectId(task_id), 'user_id': current_user['_id']},
+            {'$set': {'title': new_title}}
+        )
+
+        if result.matched_count == 0:
+            return jsonify({"msg": "Task not found or unauthorized"}), 404
+
+        # שליפת המשימה המעודכנת
+        updated_task = mongo.db.tasks.find_one({'_id': ObjectId(task_id)})
+        updated_task['_id'] = str(updated_task['_id'])
+        updated_task['user_id'] = str(updated_task['user_id'])
+
+        return jsonify(updated_task), 200
+
+    except Exception as e:
+        print(f"Error updating title: {e}")
+        return jsonify({"msg": "Update failed"}), 500

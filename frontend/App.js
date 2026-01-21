@@ -143,7 +143,7 @@ export default function App() {
     const toggleTask = useCallback(async (task) => {
         const next = !task.isCompleted;
         try {
-            const res = await fetch(`${API_BASE}/api/tasks/${task._id}`, {
+            const res = await fetch(`${API_BASE}/api/tasks/${task._id}/status`, {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',
@@ -185,7 +185,7 @@ export default function App() {
     // עדכון כותרת משימה
     const updateTaskTitle = useCallback(async (taskId, newTitle) => {
         try {
-            const res = await fetch(`${API_BASE}/api/tasks/${taskId}`, {
+            const res = await fetch(`${API_BASE}/api/tasks/${taskId}/title`, {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',
