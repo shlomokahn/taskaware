@@ -1,8 +1,0 @@
-# backend/requirements.txt
-Flask==2.3.3          # Lightweight web framework
-pymongo==4.7.3        # Official MongoDB driver for Python
-python-dotenv==1.0.1  # Loads environment variables from.env files
-gunicorn==22.0.0      # Production WSGI server for Render deployment
-dnspython             # Required for mongodb+srv:// connection strings
-bcrypt==4.1.2         # Secure password hashing 
-PyJWT==2.8.0          # JSON Web Token implementation for auth
