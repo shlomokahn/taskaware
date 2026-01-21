@@ -18,7 +18,7 @@ import { useLocationSync } from './src/useLocationSync.js';
 import TaskDetailModal from './src/components/TaskDetailModal';
 import EditTask from './src/EditTask';
 
-const API_BASE = 'http://172.20.10.3:8000';
+const API_BASE = 'https://taskaware-backend.onrender.com';
 
 export default function App() {
     const [tasks, setTasks] = useState([]);
