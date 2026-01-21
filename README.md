@@ -4,6 +4,6 @@ https://dashboard.render.com/
 דרך הגיטאב -> החשבון המכללתי של שלומי
 
 הדאטה בייס נמצא ב :
-https://cloud.mongodb.com/
+console.neon.tech
 כניסה :
-דרך הגוגל s33455543 -> Hech's Org - 2025-12-07
+דרך הגיטאב -> החשבון המכללתי של שלומי
