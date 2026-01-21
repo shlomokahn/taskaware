@@ -51,21 +51,20 @@ def create_task(current_user):
     
     return jsonify(mongo_to_json(new_task)), 201
 
-# --- עדכון סטטוס בלבד ---
+# --- עדכון סטטוס בלבד (מתוקן) ---
 @tasks_bp.route('/<task_id>/status', methods=['PUT'])
 @token_required
 def update_task_status(current_user, task_id):
     try:
         data = request.get_json()
         
-        # וידוא שקיבלנו את השדה הנכון
         if 'isCompleted' not in data:
             return jsonify({"msg": "Missing field: isCompleted"}), 400
             
         new_status = data['isCompleted']
 
-        # עדכון ב-DB
-        result = mongo.db.tasks.update_one(
+        # תיקון: שימוש ב-tasks_collection במקום mongo.db.tasks
+        result = tasks_collection.update_one(
             {'_id': ObjectId(task_id), 'user_id': current_user['_id']},
             {'$set': {'isCompleted': new_status}}
         )
@@ -73,19 +72,18 @@ def update_task_status(current_user, task_id):
         if result.matched_count == 0:
             return jsonify({"msg": "Task not found or unauthorized"}), 404
 
-        # שליפת המשימה המעודכנת להחזרה
-        updated_task = mongo.db.tasks.find_one({'_id': ObjectId(task_id)})
-        updated_task['_id'] = str(updated_task['_id'])
-        updated_task['user_id'] = str(updated_task['user_id'])
-
-        return jsonify(updated_task), 200
+        # שליפת המשימה המעודכנת
+        updated_task = tasks_collection.find_one({'_id': ObjectId(task_id)})
+        
+        # תיקון: שימוש בפונקציית העזר הקיימת שלך להמרה
+        return jsonify(mongo_to_json(updated_task)), 200
 
     except Exception as e:
         print(f"Error updating status: {e}")
-        return jsonify({"msg": "Update failed"}), 500
+        return jsonify({"msg": "Update failed", "error": str(e)}), 500
 
 
-# --- עדכון כותרת בלבד ---
+# --- עדכון כותרת בלבד (מתוקן) ---
 @tasks_bp.route('/<task_id>/title', methods=['PUT'])
 @token_required
 def update_task_title(current_user, task_id):
@@ -97,8 +95,8 @@ def update_task_title(current_user, task_id):
             
         new_title = data['title'].strip()
 
-        # עדכון ב-DB
-        result = mongo.db.tasks.update_one(
+        # תיקון: שימוש ב-tasks_collection במקום mongo.db.tasks
+        result = tasks_collection.update_one(
             {'_id': ObjectId(task_id), 'user_id': current_user['_id']},
             {'$set': {'title': new_title}}
         )
@@ -107,12 +105,11 @@ def update_task_title(current_user, task_id):
             return jsonify({"msg": "Task not found or unauthorized"}), 404
 
         # שליפת המשימה המעודכנת
-        updated_task = mongo.db.tasks.find_one({'_id': ObjectId(task_id)})
-        updated_task['_id'] = str(updated_task['_id'])
-        updated_task['user_id'] = str(updated_task['user_id'])
+        updated_task = tasks_collection.find_one({'_id': ObjectId(task_id)})
 
-        return jsonify(updated_task), 200
+        # תיקון: שימוש בפונקציית העזר הקיימת שלך להמרה
+        return jsonify(mongo_to_json(updated_task)), 200
 
     except Exception as e:
         print(f"Error updating title: {e}")
-        return jsonify({"msg": "Update failed"}), 500
+        return jsonify({"msg": "Update failed", "error": str(e)}), 500
