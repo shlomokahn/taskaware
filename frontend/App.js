@@ -17,8 +17,11 @@ import { useLocationSync } from './src/useLocationSync.js';
 // --- ייבוא המודלים ---
 import TaskDetailModal from './src/components/TaskDetailModal';
 import EditTask from './src/EditTask';
+import DateTimePicker from '@react-native-community/datetimepicker';
 
 const API_BASE = 'https://taskaware-backend.onrender.com';
+
+
 
 export default function App() {
     const [tasks, setTasks] = useState([]);
@@ -27,6 +30,9 @@ export default function App() {
     const [newTitle, setNewTitle] = useState('');
     const [creating, setCreating] = useState(false);
     const [error, setError] = useState('');
+    const [dueDate, setDueDate] = useState(new Date());
+    const [showPicker, setShowPicker] = useState(false);
+
 
     const [selectedTask, setSelectedTask] = useState(null);
     const [editingTask, setEditingTask] = useState(null);
@@ -37,6 +43,13 @@ export default function App() {
     const [isLoginMode, setIsLoginMode] = useState(true);
 
     const { location } = useLocationSync(API_BASE, token);
+
+    const onDateChange = (event, selectedDate) => {
+        setShowPicker(false);
+    if (selectedDate) {
+        setDueDate(selectedDate);
+        }
+    };
 
     useEffect(() => {
         const loadToken = async () => {
@@ -135,14 +148,16 @@ export default function App() {
         setCreating(true);
         setError('');
         try {
-            // תיקון: הוספת / בסוף הכתובת
             const res = await fetch(`${API_BASE}/api/tasks/`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Token ${token}`
                 },
-                body: JSON.stringify({ title }),
+                body: JSON.stringify({
+                    title: newTitle,
+                    dueDate: dueDate.toISOString()
+                }),
             });
             if (!res.ok) {
                 const errText = await res.text();
@@ -158,7 +173,7 @@ export default function App() {
         } finally {
             setCreating(false);
         }
-    }, [newTitle, token]);
+    }, [newTitle, token, dueDate]);
 
     const toggleTask = useCallback(async (task) => {
         const next = !task.isCompleted;
@@ -298,28 +313,47 @@ export default function App() {
                 </TouchableOpacity>
             </View>
 
-            <View style={styles.inputRow}>
-                <TextInput
-                    style={styles.input}
-                    placeholder="מה יש לעשות היום?"
-                    placeholderTextColor="#9aa0a6"
-                    value={newTitle}
-                    onChangeText={setNewTitle}
-                    editable={!creating}
-                    onSubmitEditing={createTask}
-                />
-                <TouchableOpacity
-                    style={[styles.addBtn, (creating || !newTitle.trim()) && styles.addBtnDisabled]}
-                    onPress={createTask}
-                    disabled={creating || !newTitle.trim()}
-                >
-                    {creating ? (
-                        <ActivityIndicator color="#fff" size="small" />
-                    ) : (
-                        <Text style={styles.addBtnText}>+</Text>
-                    )}
-                </TouchableOpacity>
-            </View>
+<View style={styles.inputRow}>
+    <TextInput
+        style={[styles.input, { flex: 1 }]} // הוספנו flex: 1 כדי שישאיר מקום לכפתורים
+        placeholder="מה יש לעשות היום?"
+        placeholderTextColor="#9aa0a6"
+        value={newTitle}
+        onChangeText={setNewTitle}
+        editable={!creating}
+        onSubmitEditing={createTask}
+    />
+
+    {/* כפתור בחירת זמן */}
+    <TouchableOpacity 
+        style={styles.datePickerBtn} 
+        onPress={() => setShowPicker(true)}
+    >
+        <Text style={{ fontSize: 20 }}>📅</Text>
+    </TouchableOpacity>
+
+    {showPicker && (
+        <DateTimePicker
+            value={dueDate}
+            mode="datetime" // מאפשר לבחור גם תאריך וגם שעה
+            is24Hour={true}
+            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+            onChange={onDateChange}
+        />
+    )}
+
+    <TouchableOpacity
+        style={[styles.addBtn, (creating || !newTitle.trim()) && styles.addBtnDisabled]}
+        onPress={createTask}
+        disabled={creating || !newTitle.trim()}
+    >
+        {creating ? (
+            <ActivityIndicator color="#fff" size="small" />
+        ) : (
+            <Text style={styles.addBtnText}>+</Text>
+        )}
+    </TouchableOpacity>
+</View>
 
             {error ? <Text style={styles.error}>{error}</Text> : null}
 

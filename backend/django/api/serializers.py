@@ -7,6 +7,7 @@ class TaskSerializer(serializers.ModelSerializer):
     _id = serializers.IntegerField(source='id', read_only=True)
     isCompleted = serializers.BooleanField(source='is_completed', required=False)
     createdAt = serializers.DateTimeField(source='created_at', read_only=True)
+    dueDate = serializers.DateTimeField(source='due_date', required=False, allow_null=True)
 
     class Meta:
         model = Task
