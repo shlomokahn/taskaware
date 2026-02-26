@@ -1,20 +1,6 @@
-# התעלמות מתיקיות של עורכי קוד
 .vs/
 .vscode/
-.idea/
-
-# התעלמות מתיקיות של ספריות (EAS יתקין אותן בעצמו בענן)
+**/*.vsidx
+backend/
 node_modules/
-
-# התעלמות מתיקיות של ה-Backend (כי אנחנו בונים רק את הפרונטנד)
-../backend/
-
-# התעלמות מקבצי לוג ושגיאות
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# התעלמות מתיקיות בילד מקומיות
-android/
-ios/
-dist/
+.expo/
