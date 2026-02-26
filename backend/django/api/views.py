@@ -7,7 +7,7 @@ from django.contrib.auth import authenticate
 from .models import Task
 from .serializers import TaskSerializer, UserSerializer
 from .models import UserProfile
-
+from exponent_server_sdk import PushClient, PushMessage
 
 # --- Authentication ---
 
@@ -70,3 +70,47 @@ def save_push_token(request):
     profile.save()
     
     return Response({"message": "Token saved successfully"}, status=status.HTTP_200_OK)
+
+
+    def send_expo_push_notification(expo_token, title, body):
+    """
+    פונקציית עזר לשליחת התראת פוש דרך שרתי Expo
+    """
+    try:
+        response = PushClient().publish(
+            PushMessage(
+                to=expo_token,
+                title=title,
+                body=body,
+                sound="default"
+            )
+        )
+        print("Push sent successfully!", response)
+    except Exception as e:
+        print("Failed to send push notification:", str(e))
+
+class TaskViewSet(viewsets.ModelViewSet):
+    serializer_class = TaskSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return Task.objects.filter(user=self.request.user).order_by('-created_at')
+
+    def perform_create(self, serializer):
+        # שומרים את המשימה ומשייכים למשתמש
+        task = serializer.save(user=self.request.user)
+        
+        # --- תוספת הפוש ---
+        try:
+            # בודקים אם יש למשתמש פרופיל עם טוקן התראות
+            profile = self.request.user.profile
+            if profile.expo_push_token:
+                # שולחים התראה לטלפון!
+                send_expo_push_notification(
+                    expo_token=profile.expo_push_token,
+                    title="משימה חדשה במערכת! 🚀",
+                    body=f"המשימה '{task.title}' נשמרה בהצלחה בשרת."
+                )
+        except Exception as e:
+            # במקרה שאין למשתמש עדיין פרופיל, נתעלם כדי לא לקרוס
+            print("Could not send push notification:", str(e))

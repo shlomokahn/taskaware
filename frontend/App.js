@@ -21,6 +21,9 @@ import TaskDetailModal from './src/components/TaskDetailModal';
 import EditTask from './src/EditTask';
 import DateTimePicker, { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
 
+import * as Device from 'expo-device';
+import Constants from 'expo-constants';
+
 // הגדרת התנהגות התראות כשהאפליקציה פתוחה
 Notifications.setNotificationHandler({
     handleNotification: async () => ({
@@ -51,7 +54,57 @@ export default function App() {
     const [isLoginMode, setIsLoginMode] = useState(true);
 
     const { location } = useLocationSync(API_BASE, token);
+    useEffect(() => {
+        (async () => {
+            // 1. הגדרת ערוץ באנדרואיד (כמו מקודם)
+            if (Platform.OS === 'android') {
+                await Notifications.setNotificationChannelAsync('default', {
+                    name: 'Task Reminders',
+                    importance: Notifications.AndroidImportance.HIGH,
+                });
+            }
 
+            // 2. בדיקה שאנחנו על מכשיר אמיתי (פוש לא עובד על סימולטור של אפל, ובאנדרואיד מומלץ מכשיר אמיתי)
+            if (Device.isDevice) {
+                const { status: existingStatus } = await Notifications.getPermissionsAsync();
+                let finalStatus = existingStatus;
+
+                if (existingStatus !== 'granted') {
+                    const { status } = await Notifications.requestPermissionsAsync();
+                    finalStatus = status;
+                }
+
+                if (finalStatus !== 'granted') {
+                    console.log('Failed to get push token for push notification!');
+                    return;
+                }
+
+                try {
+                    // יצירת הטוקן משרתי Expo
+                    // הערה: אם אתה מקבל שגיאה שחסר projectId, הוסף אותו בתוך האובייקט כאן
+                    const pushTokenString = (await Notifications.getExpoPushTokenAsync()).data;
+                    console.log("My Expo Push Token:", pushTokenString);
+
+                    // 3. אם יש לנו משתמש מחובר (token של השרת שלנו), נשלח לו את הטוקן של Expo
+                    if (token) {
+                        await fetch(`${API_BASE}/api/save-push-token/`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': `Token ${token}`
+                            },
+                            body: JSON.stringify({ token: pushTokenString }),
+                        });
+                        console.log("Push token sent to Django successfully!");
+                    }
+                } catch (error) {
+                    console.error("Error getting or sending push token:", error);
+                }
+            } else {
+                console.log('Must use physical device for Push Notifications');
+            }
+        })();
+    }, [token]);
     // --- 1. ניהול התראות ---
 
     useEffect(() => {
