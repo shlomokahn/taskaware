@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
     ActivityIndicator,
     FlatList,
@@ -14,24 +14,24 @@ import {
     Alert
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as Notifications from 'expo-notifications'; // ייבוא התראות
+import * as Notifications from 'expo-notifications';
 import { useLocationSync } from './src/useLocationSync.js';
 
-// --- ייבוא המודלים ---
 import TaskDetailModal from './src/components/TaskDetailModal';
 import EditTask from './src/EditTask';
-import DateTimePicker from '@react-native-community/datetimepicker';
+import DateTimePicker, { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
 
-const API_BASE = 'https://taskaware-backend.onrender.com';
-
-// הגדרת האופן שבו התראות יופיעו כשהאפליקציה פתוחה
+// הגדרת התנהגות התראות כשהאפליקציה פתוחה
 Notifications.setNotificationHandler({
     handleNotification: async () => ({
-        shouldShowAlert: true,
+        shouldShowBanner: true, // מקפיץ את ההתראה למעלה (מחליף את shouldShowAlert)
+        shouldShowList: true,   // מציג במרכז ההתראות
         shouldPlaySound: true,
         shouldSetBadge: false,
     }),
 });
+
+const API_BASE = 'https://taskaware-backend.onrender.com';
 
 export default function App() {
     const [tasks, setTasks] = useState([]);
@@ -39,16 +39,12 @@ export default function App() {
     const [refreshing, setRefreshing] = useState(false);
     const [newTitle, setNewTitle] = useState('');
     const [creating, setCreating] = useState(false);
-    const [error, setError] = useState('');
-    
-    // תאריכים והתראות
+
     const [dueDate, setDueDate] = useState(new Date());
-    const [tempDate, setTempDate] = useState(new Date());
-    const [showPicker, setShowPicker] = useState(false);
+    const [showIOSPicker, setShowIOSPicker] = useState(false);
 
     const [selectedTask, setSelectedTask] = useState(null);
     const [editingTask, setEditingTask] = useState(null);
-
     const [token, setToken] = useState(null);
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
@@ -56,68 +52,95 @@ export default function App() {
 
     const { location } = useLocationSync(API_BASE, token);
 
-    // --- ניהול התראות ---
+    // --- 1. ניהול התראות ---
 
     useEffect(() => {
-        const requestPermissions = async () => {
-            const { status } = await Notifications.getPermissionsAsync();
+        (async () => {
+            // בקשת הרשאה
+            const { status } = await Notifications.requestPermissionsAsync();
             if (status !== 'granted') {
-                await Notifications.requestPermissionsAsync();
+                console.log('Notification permissions denied');
             }
-        };
-        requestPermissions();
+
+            // יצירת ערוץ התראות (קריטי לאנדרואיד)
+            if (Platform.OS === 'android') {
+                await Notifications.setNotificationChannelAsync('default', {
+                    name: 'Task Reminders',
+                    importance: Notifications.AndroidImportance.HIGH,
+                    vibrationPattern: [0, 250, 250, 250],
+                    lightColor: '#FF231F7C',
+                });
+            }
+        })();
     }, []);
 
-    const scheduleNotification = async (task) => {
-        if (!task.dueDate) return;
-        const trigger = new Date(task.dueDate);
-        if (trigger <= new Date()) return;
+    const scheduleNotification = async (taskTitle, date) => {
+        // 1. הופכים את התאריך למספר טהור (Timestamp) - זה מונע מאנדרואיד להתבלבל ולחשוב שהתאריך בעבר
+        const triggerTime = new Date(date).getTime();
+        const now = Date.now();
 
-        const identifier = await Notifications.scheduleNotificationAsync({
-            content: {
-                title: "תזכורת למשימה ⏰",
-                body: task.title,
-                sound: true,
+        // 2. מוודאים שלא בחרנו תאריך/שעה שעברו
+        if (triggerTime <= now) {
+            console.log("Date is in the past, skipping notification");
+            return null;
+        }
+
+        try {
+            const id = await Notifications.scheduleNotificationAsync({
+                content: {
+                    title: "תזכורת למשימה! 🔔",
+                    body: taskTitle,
+                    sound: true,
+                    priority: Notifications.AndroidNotificationPriority.HIGH,
+                },
+                // 3. משתמשים במספר הטהור (date) יחד עם הערוץ שיצרנו (channelId)
+                trigger: {
+                    date: triggerTime,
+                    channelId: 'default',
+                },
+            });
+            console.log(`Notification scheduled accurately for timestamp: ${triggerTime}. ID: ${id}`);
+            return id;
+        } catch (e) {
+            console.error("Failed to schedule notification:", e);
+            return null;
+        }
+    };
+
+    const cancelNotification = async (notifId) => {
+        if (notifId) {
+            await Notifications.cancelScheduledNotificationAsync(notifId);
+        }
+    };
+
+    // --- 2. בחירת תאריך ושעה (אנדרואיד) ---
+
+    const showAndroidPicker = () => {
+        // שלב א': בחירת תאריך
+        DateTimePickerAndroid.open({
+            value: dueDate,
+            mode: 'date',
+            display: 'calendar',
+            onChange: (event, selectedDate) => {
+                if (event.type === 'set' && selectedDate) {
+                    // שלב ב': בחירת שעה מיד אחרי אישור התאריך
+                    DateTimePickerAndroid.open({
+                        value: selectedDate,
+                        mode: 'time',
+                        is24Hour: true,
+                        display: 'clock',
+                        onChange: (timeEvent, finalDate) => {
+                            if (timeEvent.type === 'set' && finalDate) {
+                                setDueDate(finalDate);
+                            }
+                        },
+                    });
+                }
             },
-            trigger,
         });
-        await AsyncStorage.setItem(`notif_${task._id}`, identifier);
     };
 
-    const cancelNotification = async (taskId) => {
-        const identifier = await AsyncStorage.getItem(`notif_${taskId}`);
-        if (identifier) {
-            await Notifications.cancelScheduledNotificationAsync(identifier);
-            await AsyncStorage.removeItem(`notif_${taskId}`);
-        }
-    };
-
-    // --- לוגיקת בחירת תאריך ---
-
-    const onDateChange = (event, selectedDate) => {
-        if (Platform.OS === 'android') {
-            setShowPicker(false);
-            if (selectedDate) setDueDate(selectedDate);
-        } else {
-            if (selectedDate) setTempDate(selectedDate);
-        }
-    };
-
-    const confirmDate = () => {
-        setDueDate(tempDate);
-        setShowPicker(false);
-    };
-
-    // --- פונקציות API ---
-
-    useEffect(() => {
-        const loadToken = async () => {
-            const savedToken = await AsyncStorage.getItem('userToken');
-            if (savedToken) setToken(savedToken);
-            setLoading(false);
-        };
-        loadToken();
-    }, []);
+    // --- 3. לוגיקה של משימות ---
 
     const fetchTasks = useCallback(async () => {
         if (!token) return;
@@ -128,98 +151,73 @@ export default function App() {
             const data = await res.json();
             setTasks(Array.isArray(data) ? data : []);
         } catch (err) {
-            setError('לא הצלחנו לטעון משימות.');
+            console.log('Fetch error:', err);
         } finally {
             setLoading(false);
             setRefreshing(false);
         }
     }, [token]);
 
-    useEffect(() => { fetchTasks(); }, [fetchTasks]);
+    useEffect(() => {
+        (async () => {
+            const savedToken = await AsyncStorage.getItem('userToken');
+            if (savedToken) setToken(savedToken);
+            setLoading(false);
+        })();
+    }, []);
 
-    const createTask = useCallback(async () => {
+    useEffect(() => { if (token) fetchTasks(); }, [token, fetchTasks]);
+
+    const createTask = async () => {
         const title = newTitle.trim();
         if (!title || !token) return;
+
         setCreating(true);
         try {
+            // תזמון התראה מקומית
+            const notifId = await scheduleNotification(title, dueDate);
+
             const res = await fetch(`${API_BASE}/api/tasks/`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Token ${token}` },
-                body: JSON.stringify({ title, dueDate: dueDate.toISOString() }),
+                body: JSON.stringify({
+                    title,
+                    dueDate: dueDate.toISOString(),
+                    notificationId: notifId // שים לב: השרת צריך לתמוך בשדה זה
+                }),
             });
+
             const created = await res.json();
-            await scheduleNotification(created); // תזמון התראה
-            setTasks((prev) => [created, ...prev]);
+            setTasks(prev => [created, ...prev]);
             setNewTitle('');
             setDueDate(new Date());
         } catch (err) {
-            setError('שגיאה ביצירה');
-        } finally {
-            setCreating(false);
-        }
-    }, [newTitle, token, dueDate]);
+            Alert.alert("שגיאה", "שגיאה בשמירת המשימה");
+        } finally { setCreating(false); }
+    };
 
-    const toggleTask = useCallback(async (task) => {
-        const next = !task.isCompleted;
-        try {
-            const res = await fetch(`${API_BASE}/api/tasks/${task._id}/`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json', 'Authorization': `Token ${token}` },
-                body: JSON.stringify({ isCompleted: next }),
-            });
-            const updated = await res.json();
-            
-            if (updated.isCompleted) {
-                await cancelNotification(task._id);
-            } else {
-                await scheduleNotification(updated);
-            }
-
-            setTasks((prev) => prev.map((t) => (t._id === task._id ? updated : t)));
-        } catch (err) { setError('עדכון נכשל'); }
-    }, [token]);
-
-    const deleteTask = useCallback(async (taskId) => {
+    const handleUpdateTask = async (taskId, fields) => {
         try {
             const res = await fetch(`${API_BASE}/api/tasks/${taskId}/`, {
-                method: 'DELETE',
-                headers: { 'Authorization': `Token ${token}` }
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Token ${token}` },
+                body: JSON.stringify(fields),
             });
-            if (res.ok) {
-                await cancelNotification(taskId); // ביטול התראה
-                setTasks(prev => prev.filter(t => t._id !== taskId));
-                setSelectedTask(null);
-            }
+            const updated = await res.json();
+            setTasks(prev => prev.map(t => t._id === taskId ? updated : t));
+            return updated;
         } catch (err) { console.error(err); }
-    }, [token]);
-
-    // ... handleAuth ופונקציות עזר נוספות ...
-    const handleAuth = async () => {
-        setLoading(true);
-        const path = isLoginMode ? '/api/login' : '/api/signup';
-        try {
-            const res = await fetch(`${API_BASE}${path}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username, password }),
-            });
-            const data = await res.json();
-            if (data.token) {
-                await AsyncStorage.setItem('userToken', data.token);
-                setToken(data.token);
-            } else { throw new Error('שגיאה בהתחברות'); }
-        } catch (err) { setError(err.message); } finally { setLoading(false); }
     };
 
-    const updateTaskTitle = async (taskId, title) => {
-        const res = await fetch(`${API_BASE}/api/tasks/${taskId}/`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Token ${token}` },
-            body: JSON.stringify({ title }),
+    const formatDisplayDate = (date) => {
+        if (!date) return 'בחר תאריך';
+        const d = new Date(date);
+        return isNaN(d.getTime()) ? 'תאריך לא תקין' : d.toLocaleString('he-IL', {
+            day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'
         });
-        const updated = await res.json();
-        setTasks(prev => prev.map(t => t._id === taskId ? updated : t));
     };
+
+    // --- 4. מסכי התחברות ---
 
     if (!token) {
         return (
@@ -227,11 +225,25 @@ export default function App() {
                 <Text style={styles.brand}>TaskAware</Text>
                 <TextInput style={styles.input} placeholder="שם משתמש" value={username} onChangeText={setUsername} autoCapitalize="none" />
                 <TextInput style={styles.input} placeholder="סיסמה" secureTextEntry value={password} onChangeText={setPassword} />
-                <TouchableOpacity style={styles.addBtn} onPress={handleAuth}>
+                <TouchableOpacity style={styles.addBtn} onPress={async () => {
+                    const path = isLoginMode ? '/api/login' : '/api/signup';
+                    try {
+                        const res = await fetch(`${API_BASE}${path}`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ username, password }),
+                        });
+                        const data = await res.json();
+                        if (data.token) {
+                            await AsyncStorage.setItem('userToken', data.token);
+                            setToken(data.token);
+                        } else { Alert.alert("שגיאה", "פרטי התחברות שגויים"); }
+                    } catch (e) { Alert.alert("שגיאה", "חיבור לשרת נכשל"); }
+                }}>
                     <Text style={styles.addBtnText}>{isLoginMode ? 'כניסה' : 'הרשמה'}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity onPress={() => setIsLoginMode(!isLoginMode)}>
-                    <Text style={{textAlign: 'center', marginTop: 15}}>{isLoginMode ? 'אין חשבון? הירשם' : 'יש חשבון? התחבר'}</Text>
+                    <Text style={{ textAlign: 'center', marginTop: 15 }}>{isLoginMode ? 'עבור להרשמה' : 'עבור להתחברות'}</Text>
                 </TouchableOpacity>
             </KeyboardAvoidingView>
         );
@@ -240,72 +252,99 @@ export default function App() {
     return (
         <View style={styles.container}>
             <View style={styles.header}>
-                <View>
-                    <Text style={styles.brand}>TaskAware</Text>
-                    <Text style={styles.subBrand}>המשימות שלך</Text>
-                </View>
+                <Text style={styles.brand}>TaskAware</Text>
                 <TouchableOpacity onPress={() => { AsyncStorage.removeItem('userToken'); setToken(null); }}>
                     <Text style={{ color: '#ef4444' }}>יציאה</Text>
                 </TouchableOpacity>
             </View>
 
             <View style={styles.inputRow}>
-                <TextInput
-                    style={[styles.input, { flex: 1 }]}
-                    placeholder="מה עושים היום?"
-                    value={newTitle}
-                    onChangeText={setNewTitle}
-                />
-                <TouchableOpacity style={styles.datePickerBtn} onPress={() => { setTempDate(dueDate); setShowPicker(true); }}>
+                <TextInput style={[styles.input, { flex: 1 }]} placeholder="משימה חדשה..." value={newTitle} onChangeText={setNewTitle} />
+
+                <TouchableOpacity
+                    style={styles.datePickerBtn}
+                    onPress={() => Platform.OS === 'android' ? showAndroidPicker() : setShowIOSPicker(true)}
+                >
                     <Text style={{ fontSize: 20 }}>📅</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.addBtn} onPress={createTask} disabled={!newTitle.trim()}>
-                    <Text style={styles.addBtnText}>+</Text>
+
+                <TouchableOpacity style={styles.addBtn} onPress={createTask} disabled={creating}>
+                    {creating ? <ActivityIndicator color="#fff" /> : <Text style={styles.addBtnText}>+</Text>}
                 </TouchableOpacity>
             </View>
 
-            {/* Modal לתאריך ב-iOS */}
-            {showPicker && Platform.OS === 'ios' && (
-                <Modal transparent={true} animationType="slide">
+            <Text style={styles.dateInfo}>מיועד ל: {formatDisplayDate(dueDate)}</Text>
+
+            {/* iOS Picker Modal */}
+            {Platform.OS === 'ios' && showIOSPicker && (
+                <Modal transparent animationType="slide">
                     <View style={styles.modalOverlay}>
                         <View style={styles.pickerContainer}>
-                            <View style={styles.pickerHeader}>
-                                <TouchableOpacity onPress={() => setShowPicker(false)}><Text style={{color: 'red'}}>ביטול</Text></TouchableOpacity>
-                                <TouchableOpacity onPress={confirmDate}><Text style={{color: 'green', fontWeight: 'bold'}}>אישור</Text></TouchableOpacity>
-                            </View>
-                            <DateTimePicker value={tempDate} mode="datetime" is24Hour={true} display="spinner" onChange={onDateChange} />
+                            <TouchableOpacity style={{ alignSelf: 'flex-end', padding: 10 }} onPress={() => setShowIOSPicker(false)}>
+                                <Text style={{ color: 'blue', fontWeight: 'bold' }}>סיום</Text>
+                            </TouchableOpacity>
+                            <DateTimePicker
+                                value={dueDate}
+                                mode="datetime"
+                                display="spinner"
+                                onChange={(e, d) => d && setDueDate(d)}
+                            />
                         </View>
                     </View>
                 </Modal>
             )}
 
-            {/* Picker לאנדרואיד */}
-            {showPicker && Platform.OS === 'android' && (
-                <DateTimePicker value={dueDate} mode="datetime" is24Hour={true} onChange={onDateChange} />
-            )}
-
-            <Text style={styles.dateInfo}>זמן נבחר: {dueDate.toLocaleString('he-IL')}</Text>
-
             <FlatList
                 data={tasks}
-                keyExtractor={(item) => item._id.toString()}
+                keyExtractor={(item) => item._id}
                 renderItem={({ item }) => (
                     <TouchableOpacity style={styles.taskRow} onPress={() => setSelectedTask(item)}>
-                        <View style={{ flex: 1 }}>
-                            <Text style={[styles.taskTitle, item.isCompleted && styles.completedText]}>
-                                {item.isCompleted ? '✓ ' : '○ '}{item.title}
-                            </Text>
-                            {item.dueDate && (
-                                <Text style={styles.taskDate}>⏰ {new Date(item.dueDate).toLocaleString('he-IL')}</Text>
-                            )}
-                        </View>
+                        <Text style={[styles.taskTitle, item.isCompleted && { textDecorationLine: 'line-through' }]}>{item.title}</Text>
+                        <Text style={styles.taskDate}>⏰ {formatDisplayDate(item.dueDate)}</Text>
                     </TouchableOpacity>
                 )}
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={fetchTasks} />}
             />
 
-            <TaskDetailModal visible={!!selectedTask} task={selectedTask} onClose={() => setSelectedTask(null)} onToggle={toggleTask} onDelete={deleteTask} onEdit={(t) => { setSelectedTask(null); setEditingTask(t); }} />
-            <EditTask visible={!!editingTask} task={editingTask} onClose={() => setEditingTask(null)} onSave={updateTaskTitle} />
+            <TaskDetailModal
+                visible={!!selectedTask}
+                task={selectedTask}
+                onClose={() => setSelectedTask(null)}
+                onToggle={async (task) => {
+                    const newStatus = !task.isCompleted;
+                    // ביטול התראה אם המשימה בוצעה
+                    if (newStatus) await cancelNotification(task.notificationId);
+
+                    await handleUpdateTask(task._id, { isCompleted: newStatus });
+                    setSelectedTask(null);
+                }}
+                onDelete={async (id) => {
+                    // ביטול התראה במחיקה
+                    if (selectedTask?.notificationId) {
+                        await cancelNotification(selectedTask.notificationId);
+                    }
+                    await fetch(`${API_BASE}/api/tasks/${id}/`, {
+                        method: 'DELETE',
+                        headers: { 'Authorization': `Token ${token}` }
+                    });
+                    setTasks(prev => prev.filter(t => t._id !== id));
+                    setSelectedTask(null);
+                }}
+                onEdit={(task) => {
+                    setEditingTask(task);
+                    setSelectedTask(null);
+                }}
+            />
+
+            <EditTask
+                visible={!!editingTask}
+                task={editingTask}
+                onClose={() => setEditingTask(null)}
+                onSave={async (id, title) => {
+                    await handleUpdateTask(id, { title });
+                    setEditingTask(null);
+                }}
+            />
         </View>
     );
 }
@@ -314,18 +353,15 @@ const styles = StyleSheet.create({
     container: { flex: 1, paddingTop: 60, paddingHorizontal: 18, backgroundColor: '#f7f9fb' },
     header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
     brand: { fontSize: 28, fontWeight: '800' },
-    subBrand: { fontSize: 14, color: '#6b7280' },
     inputRow: { flexDirection: 'row', gap: 8, marginBottom: 10 },
     input: { height: 50, backgroundColor: '#fff', borderRadius: 10, paddingHorizontal: 15, borderWidth: 1, borderColor: '#ddd' },
     addBtn: { width: 50, height: 50, backgroundColor: '#2f855a', borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
     addBtnText: { color: '#fff', fontSize: 24 },
     datePickerBtn: { width: 50, height: 50, backgroundColor: '#fff', borderRadius: 10, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#ddd' },
-    dateInfo: { fontSize: 12, color: '#2f855a', marginBottom: 10 },
+    dateInfo: { fontSize: 13, color: '#2f855a', marginBottom: 10, fontWeight: '600' },
     taskRow: { backgroundColor: '#fff', padding: 15, borderRadius: 10, marginBottom: 10, borderWidth: 1, borderColor: '#eee' },
-    taskTitle: { fontSize: 16 },
-    completedText: { textDecorationLine: 'line-through', color: '#aaa' },
-    taskDate: { fontSize: 12, color: '#666', marginTop: 5 },
-    modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)' },
-    pickerContainer: { backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingBottom: 40 },
-    pickerHeader: { flexDirection: 'row', justifyContent: 'space-between', padding: 15, borderBottomWidth: 1, borderBottomColor: '#eee' }
+    taskTitle: { fontSize: 16, fontWeight: '500' },
+    taskDate: { fontSize: 12, color: '#666', marginTop: 4 },
+    modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.4)' },
+    pickerContainer: { backgroundColor: 'white', padding: 20, borderTopLeftRadius: 20, borderTopRightRadius: 20 }
 });

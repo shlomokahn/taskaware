@@ -16,9 +16,10 @@ export default function EditTask({ visible, task, onClose, onSave }) {
     const [title, setTitle] = useState('');
     const [saving, setSaving] = useState(false);
 
+    // עדכון הכותרת כשהמשימה משתנה
     useEffect(() => {
         if (task) {
-            setTitle(task.title);
+            setTitle(task.title || '');
         }
     }, [task]);
 
@@ -31,9 +32,13 @@ export default function EditTask({ visible, task, onClose, onSave }) {
 
         setSaving(true);
         try {
-            await onSave(task._id, trimmedTitle);
-            onClose();
+            // הוספת בדיקת תקינות לפני קריאה לפונקציה
+            if (onSave && task && task._id) {
+                await onSave(task._id, trimmedTitle);
+                onClose();
+            }
         } catch (err) {
+            console.error("Save error:", err);
             alert('שגיאה בשמירה');
         } finally {
             setSaving(false);
@@ -54,13 +59,12 @@ export default function EditTask({ visible, task, onClose, onSave }) {
 
                 <View style={styles.modalView}>
                     <Text style={styles.modalTitle}>עריכת משימה ✏️</Text>
-
                     <View style={styles.divider} />
 
-                    <Text style={styles.label}>כותרה:</Text>
+                    <Text style={styles.label}>כותרת:</Text>
                     <TextInput
                         style={styles.input}
-                        placeholder="הכנס כותרה חדשה"
+                        placeholder="הכנס כותרת חדשה"
                         placeholderTextColor="#9ca3af"
                         value={title}
                         onChangeText={setTitle}
@@ -91,10 +95,6 @@ export default function EditTask({ visible, task, onClose, onSave }) {
                             )}
                         </TouchableOpacity>
                     </View>
-
-                    <TouchableOpacity style={styles.closeBtn} onPress={onClose} disabled={saving}>
-                        <Text style={styles.closeText}>סגור</Text>
-                    </TouchableOpacity>
                 </View>
             </View>
         </Modal>
@@ -102,53 +102,19 @@ export default function EditTask({ visible, task, onClose, onSave }) {
 }
 
 const styles = StyleSheet.create({
-    centeredView: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-        zIndex: 1000,
-    },
-    backdrop: {
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        backgroundColor: 'rgba(0,0,0,0.5)',
-    },
+    centeredView: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+    backdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)' },
     modalView: {
         width: width * 0.85,
         backgroundColor: 'white',
         borderRadius: 20,
         padding: 25,
         alignItems: 'center',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.25,
-        shadowRadius: 4,
         elevation: 5,
     },
-    modalTitle: {
-        fontSize: 22,
-        fontWeight: 'bold',
-        marginBottom: 15,
-        textAlign: 'center',
-        color: '#1f2937'
-    },
-    divider: {
-        height: 1,
-        backgroundColor: '#e5e7eb',
-        width: '100%',
-        marginBottom: 20
-    },
-    label: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: '#6b7280',
-        marginBottom: 8,
-        width: '100%',
-        textAlign: 'right'
-    },
+    modalTitle: { fontSize: 22, fontWeight: 'bold', marginBottom: 15, textAlign: 'center', color: '#1f2937' },
+    divider: { height: 1, backgroundColor: '#e5e7eb', width: '100%', marginBottom: 20 },
+    label: { fontSize: 16, fontWeight: '600', color: '#6b7280', marginBottom: 8, width: '100%', textAlign: 'right' },
     input: {
         width: '100%',
         minHeight: 80,
@@ -160,54 +126,13 @@ const styles = StyleSheet.create({
         fontSize: 16,
         color: '#111827',
         textAlignVertical: 'top',
-        marginBottom: 8,
         backgroundColor: '#f9fafb'
     },
-    charCount: {
-        fontSize: 12,
-        color: '#9ca3af',
-        marginBottom: 20,
-        width: '100%',
-        textAlign: 'left'
-    },
-    actions: {
-        width: '100%',
-        flexDirection: 'row',
-        gap: 12,
-        marginBottom: 20,
-        justifyContent: 'center'
-    },
-    btn: {
-        paddingVertical: 12,
-        paddingHorizontal: 24,
-        borderRadius: 10,
-        alignItems: 'center',
-        justifyContent: 'center',
-        minWidth: 100
-    },
-    btnCancel: {
-        backgroundColor: '#e5e7eb',
-        borderWidth: 1,
-        borderColor: '#d1d5db'
-    },
-    btnSave: {
-        backgroundColor: '#10b981'
-    },
-    btnTextWhite: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: '#fff'
-    },
-    btnTextDark: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: '#1f2937'
-    },
-    closeBtn: {
-        padding: 10
-    },
-    closeText: {
-        color: '#6b7280',
-        fontSize: 16
-    }
+    charCount: { fontSize: 12, color: '#9ca3af', marginBottom: 20, width: '100%', textAlign: 'left' },
+    actions: { width: '100%', flexDirection: 'row', gap: 12, justifyContent: 'center' },
+    btn: { paddingVertical: 12, paddingHorizontal: 24, borderRadius: 10, alignItems: 'center', justifyContent: 'center', minWidth: 100 },
+    btnCancel: { backgroundColor: '#e5e7eb', borderWidth: 1, borderColor: '#d1d5db' },
+    btnSave: { backgroundColor: '#10b981' },
+    btnTextWhite: { fontSize: 16, fontWeight: '600', color: '#fff' },
+    btnTextDark: { fontSize: 16, fontWeight: '600', color: '#1f2937' }
 });
