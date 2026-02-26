@@ -4,9 +4,8 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.authtoken.models import Token
 from django.contrib.auth import authenticate
-from .models import Task
+from .models import Task, UserProfile
 from .serializers import TaskSerializer, UserSerializer
-from .models import UserProfile
 from exponent_server_sdk import PushClient, PushMessage
 
 # --- Authentication ---
@@ -33,19 +32,28 @@ def login(request):
         return Response({'token': token.key})
     return Response({'msg': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
 
-# --- Tasks CRUD ---
 
-class TaskViewSet(viewsets.ModelViewSet):
-    serializer_class = TaskSerializer
-    permission_classes = [IsAuthenticated]
+# --- Helper Functions ---
 
-    def get_queryset(self):
-        return Task.objects.filter(user=self.request.user).order_by('-created_at')
+def send_expo_push_notification(expo_token, title, body):
+    """
+    פונקציית עזר לשליחת התראת פוש דרך שרתי Expo
+    """
+    try:
+        response = PushClient().publish(
+            PushMessage(
+                to=expo_token,
+                title=title,
+                body=body,
+                sound="default"
+            )
+        )
+        print("Push sent successfully!", response)
+    except Exception as e:
+        print("Failed to send push notification:", str(e))
 
-    def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
 
-# --- Location ---
+# --- Location & Push Tokens ---
 
 @api_view(['PATCH'])
 @permission_classes([IsAuthenticated])
@@ -54,7 +62,6 @@ def update_location(request):
     data = request.data
     print(f"📍 Location update for {user.username}: {data}")
     return Response({'status': 'Location updated successfully'})
-
 
 
 @api_view(['POST'])
@@ -72,22 +79,7 @@ def save_push_token(request):
     return Response({"message": "Token saved successfully"}, status=status.HTTP_200_OK)
 
 
-    def send_expo_push_notification(expo_token, title, body):
-    """
-    פונקציית עזר לשליחת התראת פוש דרך שרתי Expo
-    """
-    try:
-        response = PushClient().publish(
-            PushMessage(
-                to=expo_token,
-                title=title,
-                body=body,
-                sound="default"
-            )
-        )
-        print("Push sent successfully!", response)
-    except Exception as e:
-        print("Failed to send push notification:", str(e))
+# --- Tasks CRUD ---
 
 class TaskViewSet(viewsets.ModelViewSet):
     serializer_class = TaskSerializer
@@ -112,5 +104,5 @@ class TaskViewSet(viewsets.ModelViewSet):
                     body=f"המשימה '{task.title}' נשמרה בהצלחה בשרת."
                 )
         except Exception as e:
-            # במקרה שאין למשתמש עדיין פרופיל, נתעלם כדי לא לקרוס
+            # במקרה שאין למשתמש עדיין פרופיל (האפליקציה טרם שלחה), נתעלם
             print("Could not send push notification:", str(e))
