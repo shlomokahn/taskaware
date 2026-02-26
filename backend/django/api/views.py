@@ -6,6 +6,8 @@ from rest_framework.authtoken.models import Token
 from django.contrib.auth import authenticate
 from .models import Task
 from .serializers import TaskSerializer, UserSerializer
+from .models import UserProfile
+
 
 # --- Authentication ---
 
@@ -52,3 +54,19 @@ def update_location(request):
     data = request.data
     print(f"📍 Location update for {user.username}: {data}")
     return Response({'status': 'Location updated successfully'})
+
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def save_push_token(request):
+    token = request.data.get('token')
+    if not token:
+        return Response({"error": "No token provided"}, status=status.HTTP_400_BAD_REQUEST)
+    
+    # מציאת או יצירת פרופיל למשתמש ושמירת הטוקן
+    profile, created = UserProfile.objects.get_or_create(user=request.user)
+    profile.expo_push_token = token
+    profile.save()
+    
+    return Response({"message": "Token saved successfully"}, status=status.HTTP_200_OK)
