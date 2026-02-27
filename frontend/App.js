@@ -62,6 +62,7 @@ export default function App() {
 
     // --- 1. ניהול התראות ---
     useEffect(() => {
+        Notifications.cancelAllScheduledNotificationsAsync();
         async function setupPushNotifications() {
             if (Platform.OS === 'android') {
                 await Notifications.setNotificationChannelAsync('default', {
@@ -100,17 +101,33 @@ export default function App() {
     }, [token]);
 
     const scheduleNotification = async (taskTitle, date) => {
-        const triggerTime = new Date(date).getTime();
-        const now = Date.now();
-        if (triggerTime <= now) return null;
+        const triggerDate = new Date(date);
+        const now = new Date();
+
+        if (triggerDate <= now) {
+            console.log("הזמן עבר, מדלג על תזמון...");
+            return null;
+        }
 
         try {
             const id = await Notifications.scheduleNotificationAsync({
-                content: { title: "תזכורת למשימה! 🔔", body: taskTitle, sound: true, priority: Notifications.AndroidNotificationPriority.HIGH },
-                trigger: { date: triggerTime, channelId: 'default' },
+                content: {
+                    title: "תזכורת למשימה! 🔔",
+                    body: taskTitle,
+                    sound: true,
+                    priority: Notifications.AndroidNotificationPriority.HIGH,
+                },
+                trigger: {
+                    type: Notifications.SchedulableTriggerInputTypes.DATE, // ✅ חובה ב-SDK החדש
+                    date: triggerDate,
+                    channelId: 'default', // ✅ נדרש ל-Android
+                },
             });
             return id;
-        } catch (e) { return null; }
+        } catch (e) {
+            console.error("שגיאה בתזמון ההתראה:", e);
+            return null;
+        }
     };
 
     const cancelNotification = async (notifId) => {
@@ -188,6 +205,11 @@ export default function App() {
         const title = newTitle.trim();
         if (!title || !token) return;
 
+        // ✅ הוסף בדיקה זו
+        if (dueDate <= new Date()) {
+            Alert.alert("תאריך לא תקין", "אנא בחר תאריך ושעה בעתיד");
+            return;
+        }
         setCreating(true);
         try {
             let suggestedLocation = '';
