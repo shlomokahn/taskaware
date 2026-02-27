@@ -266,21 +266,43 @@ export default function App() {
                     <TouchableOpacity
                         style={styles.loginBtn} disabled={isAuthLoading}
                         onPress={async () => {
-                            if (!username || !password) { Alert.alert("שגיאה", "אנא הזן שם משתמש וסיסמה"); return; }
+                            if (!username || !password) {
+                                Alert.alert("שגיאה", "אנא הזן שם משתמש וסיסמה");
+                                return;
+                            }
                             setIsAuthLoading(true);
-                            const path = isLoginMode ? '/api/login/' : '/api/signup/'; // חשוב: לוודא לוכסן בסוף ב-Django
+                            const path = isLoginMode ? '/api/login/' : '/api/signup/';
                             try {
                                 const res = await fetch(`${API_BASE}${path}`, {
-                                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
                                     body: JSON.stringify({ username, password }),
                                 });
-                                const data = await res.json();
+
+                                // קוראים את התשובה קודם כל כטקסט רגיל, למקרה שזה HTML של שגיאה
+                                const textResponse = await res.text();
+
+                                if (!res.ok) {
+                                    console.error("השרת החזיר שגיאה (HTML/Text):", textResponse);
+                                    Alert.alert("שגיאה מהשרת", "הבקשה נכשלה, בדוק טרמינל");
+                                    return;
+                                }
+
+                                // אם השרת החזיר OK, אנחנו יכולים להפוך את הטקסט ל-JSON בבטחה
+                                const data = JSON.parse(textResponse);
+
                                 if (data.token) {
                                     await AsyncStorage.setItem('userToken', data.token);
                                     setToken(data.token);
-                                } else { Alert.alert("שגיאה", "פרטי התחברות שגויים"); }
-                            } catch (e) { Alert.alert("שגיאה", "חיבור לשרת נכשל"); }
-                            finally { setIsAuthLoading(false); }
+                                } else {
+                                    Alert.alert("שגיאה", "פרטי התחברות שגויים");
+                                }
+                            } catch (e) {
+                                console.error("Login detailed error:", e);
+                                Alert.alert("שגיאת רשת", "חיבור לשרת נכשל");
+                            } finally {
+                                setIsAuthLoading(false);
+                            }
                         }}
                     >
                         {isAuthLoading ? <ActivityIndicator color="#fff" /> : <Text style={styles.loginBtnText}>{isLoginMode ? 'כניסה' : 'הרשמה'}</Text>}
