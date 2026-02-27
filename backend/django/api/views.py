@@ -8,10 +8,34 @@ from .models import Task, UserProfile
 from .serializers import TaskSerializer, UserSerializer
 from exponent_server_sdk import PushClient, PushMessage
 import google.generativeai as genai
-from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.response import Response
 import os
+
+# הגדרת המפתח של גוגל
+genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
+
+# --- פונקציית עזר לשליחת התראות (Helper) ---
+
+def send_expo_push_notification(expo_token, title, body):
+    """
+    פונקציית עזר לשליחת התראת פוש דרך שרתי Expo
+    """
+    try:
+        # בדיקה שהטוקן תקין לפני השליחה
+        if not expo_token or not expo_token.startswith("ExponentPushToken"):
+            print(f"Invalid token: {expo_token}")
+            return
+            
+        response = PushClient().publish(
+            PushMessage(
+                to=expo_token,
+                title=title,
+                body=body,
+                sound="default"
+            )
+        )
+        print("Push sent successfully!", response)
+    except Exception as e:
+        print("Failed to send push notification:", str(e))
 
 # --- Authentication ---
 
@@ -38,26 +62,6 @@ def login(request):
     return Response({'msg': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
 
 
-# --- Helper Functions ---
-
-def send_expo_push_notification(expo_token, title, body):
-    """
-    פונקציית עזר לשליחת התראת פוש דרך שרתי Expo
-    """
-    try:
-        response = PushClient().publish(
-            PushMessage(
-                to=expo_token,
-                title=title,
-                body=body,
-                sound="default"
-            )
-        )
-        print("Push sent successfully!", response)
-    except Exception as e:
-        print("Failed to send push notification:", str(e))
-
-
 # --- Location & Push Tokens ---
 
 @api_view(['PATCH'])
@@ -65,6 +69,7 @@ def send_expo_push_notification(expo_token, title, body):
 def update_location(request):
     user = request.user
     data = request.data
+    # כאן אפשר להוסיף לוגיקה שבודקת קרבה למשימות ושולחת פוש אם המשתמש קרוב
     print(f"📍 Location update for {user.username}: {data}")
     return Response({'status': 'Location updated successfully'})
 
@@ -76,7 +81,6 @@ def save_push_token(request):
     if not token:
         return Response({"error": "No token provided"}, status=status.HTTP_400_BAD_REQUEST)
     
-    # מציאת או יצירת פרופיל למשתמש ושמירת הטוקן
     profile, created = UserProfile.objects.get_or_create(user=request.user)
     profile.expo_push_token = token
     profile.save()
@@ -94,32 +98,25 @@ class TaskViewSet(viewsets.ModelViewSet):
         return Task.objects.filter(user=self.request.user).order_by('-created_at')
 
     def perform_create(self, serializer):
-        # שומרים את המשימה ומשייכים למשתמש
         task = serializer.save(user=self.request.user)
         
-        # --- תוספת הפוש ---
+        # שליחת פוש בעת יצירת משימה
         try:
-            # בודקים אם יש למשתמש פרופיל עם טוקן התראות
-            profile = self.request.user.profile
+            profile = UserProfile.objects.get(user=self.request.user)
             if profile.expo_push_token:
-                # שולחים התראה לטלפון!
                 send_expo_push_notification(
                     expo_token=profile.expo_push_token,
-                    title="משימה חדשה במערכת! 🚀",
-                    body=f"המשימה '{task.title}' נשמרה בהצלחה בשרת."
+                    title="משימה חדשה נשמרה 📝",
+                    body=f"המשימה '{task.title}' התווספה לרשימה שלך."
                 )
         except Exception as e:
-            # במקרה שאין למשתמש עדיין פרופיל (האפליקציה טרם שלחה), נתעלם
-            print("Could not send push notification:", str(e))
+            print("Could not send push notification on create:", str(e))
 
 
-
-# הגדרת המפתח של גוגל (שים לב להוסיף אותו לקובץ ה-.env שלך או להגדרות השרת)
-# genai.configure(api_key="הכנס_את_המפתח_שלך_כאן_או_משתנה_סביבה")
-genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
+# --- AI Logic ---
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated]) # מוודא שרק משתמש מחובר יכול לגשת
+@permission_classes([IsAuthenticated])
 def ask_ai(request):
     title = request.data.get('title')
     
@@ -127,27 +124,31 @@ def ask_ai(request):
         return Response({"error": "חסר שם משימה"}, status=400)
 
     try:
-        # אתחול המודל
-        model = genai.GenerativeModel('gemini-2.5-flash')
+        # שימוש במודל עדכני (1.5-flash הוא מהיר וחינמי)
+        model = genai.GenerativeModel('gemini-1.5-flash')
         
-        # הפרומפט שלנו
-        prompt = f"""אתה עוזר חכם לאפליקציית ניהול משימות. המשתמש ייתן לך תיאור של משימה, ועליך להחזיר *אך ורק* את סוג המקום (באנגלית או בעברית) שבו ניתן לבצע אותה, כדי שנוכל להעביר את זה לחיפוש ב-Google Maps API. אל תוסיף שום מילה נוספת, נקודה או הסבר.
+        prompt = f"""אתה עוזר חכם לאפליקציית ניהול משימות. המשתמש ייתן לך תיאור של משימה, ועליך להחזיר *אך ורק* את סוג המקום (באנגלית או בעברית) שבו ניתן לבצע אותה. אל תוסיף שום הסבר.
         דוגמה: עבור 'לקנות חלב' תחזיר 'סופרמרקט'.
-        עבור 'לקחת חבילה' תחזיר 'דואר'.
-        עבור 'להוציא כסף' תחזיר 'כספומט'.
         המשימה: '{title}'"""
 
-        # קריאה למודל
         result = model.generate_content(prompt)
-        location_query = result.text.strip()
-        
-        # מנקה נקודה בסוף אם המודל הוסיף בטעות
-        if location_query.endswith('.'):
-            location_query = location_query[:-1]
+        location_query = result.text.strip().replace('.', '')
 
-        print(f"AI Answered: {location_query} for task: {title}")
+        # --- הוספת שליחת פוש כשה-AI מסיים לנתח ---
+        try:
+            profile = UserProfile.objects.get(user=request.user)
+            if profile.expo_push_token:
+                send_expo_push_notification(
+                    expo_token=profile.expo_push_token,
+                    title="ה-AI ניתח את המשימה! ✨",
+                    body=f"עבור '{title}', כדאי לך לחפש ב: {location_query}"
+                )
+        except:
+            pass # אם אין טוקן, פשוט נמשיך בלי לשלוח פוש
+
+        print(f"AI Answered: {location_query}")
         return Response({"locationQuery": location_query})
 
     except Exception as e:
         print("Gemini API Error:", e)
-        return Response({"error": "שגיאה בפנייה למודל ה-AI"}, status=500)
+        return Response({"error": f"שגיאה בפנייה למודל ה-AI: {str(e)}"}, status=500)
