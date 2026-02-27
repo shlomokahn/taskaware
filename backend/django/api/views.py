@@ -96,18 +96,7 @@ class TaskViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         task = serializer.save(user=self.request.user)
-        
-        # שליחת פוש בעת יצירת משימה
-        try:
-            profile = UserProfile.objects.get(user=self.request.user)
-            if profile.expo_push_token:
-                send_expo_push_notification(
-                    expo_token=profile.expo_push_token,
-                    title="משימה חדשה נשמרה 📝",
-                    body=f"המשימה '{task.title}' התווספה לרשימה שלך."
-                )
-        except Exception as e:
-            print("Could not send push notification on create:", str(e))
+
 
 
 # --- AI Logic ---
