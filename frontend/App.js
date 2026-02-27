@@ -155,13 +155,29 @@ export default function App() {
 
     useEffect(() => { if (token) fetchTasks(); }, [token, fetchTasks]);
 
-    // פונקציית דמה לבקשת מיקום מ-AI (תחובר לשרת בהמשך)
+    // הפונקציה האמיתית שמדברת עם השרת שלך (Django) שמדבר עם Gemini
     const fetchLocationFromAI = async (taskTitle) => {
         try {
             console.log(`שולח ל-AI בקשה למיקום עבור: ${taskTitle}...`);
-            // כאן תבוא קריאה לשרת שלך שידבר עם מודל ה-AI
-            // כרגע נחזיר ערך קבוע לצורך הבדיקה
-            return 'סופרמרקט';
+            const res = await fetch(`${API_BASE}/api/ask-ai/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Token ${token}` // שולח את הטוקן של המשתמש לאימות
+                },
+                body: JSON.stringify({ title: taskTitle }),
+            });
+
+            if (!res.ok) {
+                console.error("שגיאה מהשרת:", await res.text());
+                return null;
+            }
+
+            const data = await res.json();
+            if (data.locationQuery) {
+                return data.locationQuery;
+            }
+            return null;
         } catch (error) {
             console.error("שגיאה בקבלת מיקום מה-AI:", error);
             return null;
@@ -176,7 +192,7 @@ export default function App() {
         try {
             let suggestedLocation = '';
 
-            // בדיקה אם המשתמש סימן שזו משימה חכמה
+            // בודק אם המשתמש סימן שזו משימה חכמה
             if (isSmartTask) {
                 suggestedLocation = await fetchLocationFromAI(title);
                 if (suggestedLocation) {
@@ -186,7 +202,7 @@ export default function App() {
 
             const notifId = await scheduleNotification(title, dueDate);
 
-            // הוספנו את locationQuery לבקשת השמירה
+            // שמירת המשימה במסד הנתונים
             const res = await fetch(`${API_BASE}/api/tasks/`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Token ${token}` },
@@ -194,20 +210,25 @@ export default function App() {
                     title,
                     dueDate: dueDate.toISOString(),
                     notificationId: notifId,
-                    locationQuery: suggestedLocation // שומרים את המיקום
+                    locationQuery: suggestedLocation // שומרים את המיקום ב-DB
                 }),
             });
+
+            if (!res.ok) {
+                throw new Error("נכשל בשמירת המשימה");
+            }
 
             const created = await res.json();
             setTasks(prev => [created, ...prev]);
 
-            // איפוס שדות אחרי יצירה
+            // איפוס השדות
             setNewTitle('');
             setDueDate(new Date());
             setIsSmartTask(false);
 
         } catch (err) {
             Alert.alert("שגיאה", "שגיאה בשמירת המשימה");
+            console.error(err);
         } finally {
             setCreating(false);
         }
@@ -247,7 +268,7 @@ export default function App() {
                         onPress={async () => {
                             if (!username || !password) { Alert.alert("שגיאה", "אנא הזן שם משתמש וסיסמה"); return; }
                             setIsAuthLoading(true);
-                            const path = isLoginMode ? '/api/login' : '/api/signup';
+                            const path = isLoginMode ? '/api/login/' : '/api/signup/'; // חשוב: לוודא לוכסן בסוף ב-Django
                             try {
                                 const res = await fetch(`${API_BASE}${path}`, {
                                     method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -334,7 +355,7 @@ export default function App() {
             <FlatList
                 data={tasks}
                 contentContainerStyle={{ paddingBottom: 20 }}
-                keyExtractor={(item) => item._id?.toString()}
+                keyExtractor={(item) => (item._id || item.id)?.toString()}
                 ListEmptyComponent={
                     <View style={styles.emptyState}>
                         <Text style={styles.emptyStateText}>אין לך משימות כרגע. איזה כיף! 🎉</Text>
@@ -371,13 +392,13 @@ export default function App() {
                 onToggle={async (task) => {
                     const newStatus = !task.isCompleted;
                     if (newStatus) await cancelNotification(task.notificationId);
-                    await handleUpdateTask(task._id, { isCompleted: newStatus });
+                    await handleUpdateTask(task._id || task.id, { isCompleted: newStatus });
                     setSelectedTask(null);
                 }}
                 onDelete={async (id) => {
                     if (selectedTask?.notificationId) await cancelNotification(selectedTask.notificationId);
                     await fetch(`${API_BASE}/api/tasks/${id}/`, { method: 'DELETE', headers: { 'Authorization': `Token ${token}` } });
-                    setTasks(prev => prev.filter(t => t._id !== id));
+                    setTasks(prev => prev.filter(t => (t._id || t.id) !== id));
                     setSelectedTask(null);
                 }}
                 onEdit={(task) => { setEditingTask(task); setSelectedTask(null); }}
