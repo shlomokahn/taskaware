@@ -45,7 +45,7 @@ export default function App() {
     const [newTitle, setNewTitle] = useState('');
     const [dueDate, setDueDate] = useState(new Date());
     const [creating, setCreating] = useState(false);
-    const [isSmartTask, setIsSmartTask] = useState(false); // הסטייט החדש ל-AI
+    const [isSmartTask, setIsSmartTask] = useState(false); // הסטייט ל-AI
 
     const [showIOSPicker, setShowIOSPicker] = useState(false);
     const [selectedTask, setSelectedTask] = useState(null);
@@ -134,7 +134,7 @@ export default function App() {
         if (notifId) await Notifications.cancelScheduledNotificationAsync(notifId);
     };
 
-    // --- 2. בחירת תאריך ---
+    // --- 2. בחירת תאריך משימה חדשה ---
     const showAndroidPicker = () => {
         DateTimePickerAndroid.open({
             value: dueDate, mode: 'date', display: 'calendar',
@@ -149,6 +149,65 @@ export default function App() {
                 }
             },
         });
+    };
+
+    // --- לוגיקה לעריכת תאריך מהירה (במודל החדש) ---
+    const updateTaskDate = async (task) => {
+        // קודם כל סוגרים את מודל הפרטים כדי שהלוח שנה לא יוסתר
+        setSelectedTask(null);
+
+        const currentDate = new Date(task.dueDate || Date.now());
+
+        if (Platform.OS === 'android') {
+            DateTimePickerAndroid.open({
+                value: currentDate,
+                mode: 'date',
+                display: 'calendar',
+                onChange: (event, selectedDate) => {
+                    if (event.type === 'set' && selectedDate) {
+                        // אם בחר תאריך, פותחים את בחירת השעה
+                        DateTimePickerAndroid.open({
+                            value: selectedDate,
+                            mode: 'time',
+                            is24Hour: true,
+                            display: 'clock',
+                            onChange: async (timeEvent, finalDate) => {
+                                if (timeEvent.type === 'set' && finalDate) {
+                                    // בודקים שהתאריך בעתיד
+                                    if (finalDate <= new Date()) {
+                                        Alert.alert("תאריך לא תקין", "אנא בחר תאריך ושעה בעתיד");
+                                        return;
+                                    }
+                                    try {
+                                        // 1. ביטול ההתראה הישנה
+                                        if (task.notificationId) {
+                                            await cancelNotification(task.notificationId);
+                                        }
+
+                                        // 2. תזמון ההתראה החדשה
+                                        const newNotifId = await scheduleNotification(task.title, finalDate);
+
+                                        // 3. עדכון השרת והסטייט (זה גם ירענן את הרשימה במסך!)
+                                        await handleUpdateTask(task._id || task.id, {
+                                            dueDate: finalDate.toISOString(),
+                                            notificationId: newNotifId
+                                        });
+
+                                        Alert.alert("עודכן!", "מועד המשימה וההתראה שונו בהצלחה.");
+                                    } catch (err) {
+                                        console.error("שגיאה בעדכון הזמן:", err);
+                                        Alert.alert("שגיאה", "שגיאה בעדכון הזמן.");
+                                    }
+                                }
+                            },
+                        });
+                    }
+                },
+            });
+        } else {
+            // אם תצטרך תמיכה ל-iOS בהמשך נוכל לשלב את הפיקר כאן
+            Alert.alert("הודעה", "עריכת זמן מהירה נתמכת כרגע באנדרואיד. במכשירי iOS נא להיכנס לעריכה המלאה.");
+        }
     };
 
     // --- 3. לוגיקה של משימות ---
@@ -180,7 +239,7 @@ export default function App() {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': `Token ${token}` // שולח את הטוקן של המשתמש לאימות
+                    'Authorization': `Token ${token}`
                 },
                 body: JSON.stringify({ title: taskTitle }),
             });
@@ -205,11 +264,12 @@ export default function App() {
         const title = newTitle.trim();
         if (!title || !token) return;
 
-        // ✅ הוסף בדיקה זו
+        // מוודאים שזמן המשימה בעתיד
         if (dueDate <= new Date()) {
             Alert.alert("תאריך לא תקין", "אנא בחר תאריך ושעה בעתיד");
             return;
         }
+
         setCreating(true);
         try {
             let suggestedLocation = '';
@@ -232,7 +292,7 @@ export default function App() {
                     title,
                     dueDate: dueDate.toISOString(),
                     notificationId: notifId,
-                    locationQuery: suggestedLocation // שומרים את המיקום ב-DB
+                    locationQuery: suggestedLocation
                 }),
             });
 
@@ -301,7 +361,6 @@ export default function App() {
                                     body: JSON.stringify({ username, password }),
                                 });
 
-                                // קוראים את התשובה קודם כל כטקסט רגיל, למקרה שזה HTML של שגיאה
                                 const textResponse = await res.text();
 
                                 if (!res.ok) {
@@ -310,7 +369,6 @@ export default function App() {
                                     return;
                                 }
 
-                                // אם השרת החזיר OK, אנחנו יכולים להפוך את הטקסט ל-JSON בבטחה
                                 const data = JSON.parse(textResponse);
 
                                 if (data.token) {
@@ -414,7 +472,7 @@ export default function App() {
                         <View style={styles.taskContent}>
                             <Text style={[styles.taskTitle, item.isCompleted && styles.taskTitleCompleted]}>{item.title}</Text>
                             <Text style={styles.taskDate}>⏰ {formatDisplayDate(item.dueDate)}</Text>
-                            {/* אפשר להציג את המיקום אם הוא קיים */}
+                            {/* מיקום מה-AI אם קיים */}
                             {item.locationQuery && (
                                 <Text style={styles.taskLocation}>📍 מומלץ לבצע ב: {item.locationQuery}</Text>
                             )}
@@ -429,6 +487,7 @@ export default function App() {
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={fetchTasks} />}
             />
 
+            {/* המודל החדש (Bottom Sheet) */}
             <TaskDetailModal
                 visible={!!selectedTask}
                 task={selectedTask}
@@ -446,6 +505,8 @@ export default function App() {
                     setSelectedTask(null);
                 }}
                 onEdit={(task) => { setEditingTask(task); setSelectedTask(null); }}
+                // הקריאה לעריכת זמן מהירה!
+                onEditDate={(task) => updateTaskDate(task)}
             />
 
             <EditTask

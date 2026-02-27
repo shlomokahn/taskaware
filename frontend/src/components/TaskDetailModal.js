@@ -1,66 +1,92 @@
 ﻿import React from 'react';
-import { Modal, View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { Modal, View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
 
-export default function TaskDetailModal({ visible, task, onClose, onToggle, onDelete, onEdit }) {
+export default function TaskDetailModal({ visible, task, onClose, onToggle, onDelete, onEdit, onEditDate }) {
     if (!task) return null;
 
-    // פונקציה לעיצוב התאריך לתצוגה נוחה
-    const formatDate = (dateString) => {
+    // עיצוב תאריך מקוצר ונוח לתגית (למשל: 17:25, 27.02)
+    const formatCompactDate = (dateString) => {
         if (!dateString) return 'ללא תאריך';
         const d = new Date(dateString);
-        return isNaN(d.getTime()) ? 'תאריך לא תקין' : d.toLocaleString('he-IL', {
-            day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
+        return isNaN(d.getTime()) ? 'תאריך שגוי' : d.toLocaleString('he-IL', {
+            day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'
         });
     };
 
     return (
-        <Modal transparent visible={visible} animationType="fade" onRequestClose={onClose}>
+        <Modal transparent visible={visible} animationType="slide" onRequestClose={onClose}>
             <View style={styles.overlay}>
-                <View style={styles.card}>
+                {/* לחיצה מחוץ לכרטיסייה תסגור אותה */}
+                <TouchableOpacity style={styles.backgroundDismiss} onPress={onClose} activeOpacity={1} />
 
-                    {/* כותרת המשימה */}
-                    <Text style={[styles.title, task.isCompleted && styles.completedText]}>
-                        {task.title}
-                    </Text>
+                <View style={styles.bottomSheet}>
+                    {/* פס קטן למעלה שמרמז שזו מגירה נגררת */}
+                    <View style={styles.dragHandle} />
 
-                    {/* אזור פרטי המשימה (תאריך וסטטוס) */}
-                    <View style={styles.detailsContainer}>
-                        <Text style={styles.detailText}>⏰ מועד: {formatDate(task.dueDate)}</Text>
-                        <Text style={styles.detailText}>
-                            📌 סטטוס: <Text style={{ color: task.isCompleted ? '#2f855a' : '#d97706', fontWeight: 'bold' }}>
-                                {task.isCompleted ? 'הושלם' : 'בתהליך'}
-                            </Text>
+                    {/* --- שורת כותרת ואייקונים --- */}
+                    <View style={styles.headerRow}>
+                        <Text style={[styles.title, task.isCompleted && styles.completedText]}>
+                            {task.title}
                         </Text>
-                    </View>
-
-                    {/* אזור הכפתורים */}
-                    <View style={styles.actionsContainer}>
-
-                        {/* כפתור שינוי סטטוס גדול */}
-                        <TouchableOpacity
-                            style={[styles.actionBtn, { backgroundColor: task.isCompleted ? '#f59e0b' : '#2f855a' }]}
-                            onPress={() => onToggle(task)}
-                        >
-                            <Text style={styles.btnText}>{task.isCompleted ? 'סמן כלא הושלם' : 'סמן כהושלם ✓'}</Text>
-                        </TouchableOpacity>
-
-                        {/* שורת כפתורים: ערוך ומחק */}
-                        <View style={styles.rowButtons}>
-                            <TouchableOpacity style={[styles.halfBtn, { backgroundColor: '#3b82f6' }]} onPress={() => onEdit(task)}>
-                                <Text style={styles.btnText}>✏️ ערוך</Text>
+                        <View style={styles.iconActions}>
+                            <TouchableOpacity style={styles.iconBtn} onPress={() => onEdit(task)}>
+                                <Text style={styles.iconText}>✏️</Text>
                             </TouchableOpacity>
-
-                            <TouchableOpacity style={[styles.halfBtn, { backgroundColor: '#ef4444' }]} onPress={() => onDelete(task._id)}>
-                                <Text style={styles.btnText}>🗑️ מחק</Text>
+                            <TouchableOpacity style={styles.iconBtn} onPress={() => onDelete(task._id || task.id)}>
+                                <Text style={styles.iconText}>🗑️</Text>
                             </TouchableOpacity>
                         </View>
+                    </View>
 
-                        {/* כפתור סגירה סולידי */}
+                    {/* --- שורת תגיות (סטטוס וזמן) --- */}
+                    <View style={styles.badgesRow}>
+                        {/* תגית סטטוס */}
+                        <View style={[styles.badge, { backgroundColor: task.isCompleted ? '#dcfce7' : '#fef3c7' }]}>
+                            <Text style={[styles.badgeText, { color: task.isCompleted ? '#166534' : '#b45309' }]}>
+                                {task.isCompleted ? '✓ הושלם' : '📌 בתהליך'}
+                            </Text>
+                        </View>
+
+                        {/* תגית תאריך (לחיצה פותחת עריכת זמן) */}
+                        <TouchableOpacity style={styles.dateBadge} onPress={() => onEditDate && onEditDate(task)}>
+                            <Text style={styles.dateBadgeText}>⏰ {formatCompactDate(task.dueDate)} ▾</Text>
+                        </TouchableOpacity>
+                    </View>
+
+                    {/* --- אזור ה-AI והמפה (Geofencing Placeholder) --- */}
+                    {task.locationQuery ? (
+                        <View style={styles.aiSection}>
+                            <Text style={styles.aiTitle}>✨ המלצת ה-AI</Text>
+                            <Text style={styles.aiText}>כדי להשלים משימה זו, מומלץ לבקר ב: <Text style={styles.aiHighlight}>{task.locationQuery}</Text></Text>
+
+                            {/* שומר המקום למפה */}
+                            <View style={styles.mapPlaceholder}>
+                                <Text style={styles.mapText}>[ 🗺️ מפה מקומית עם סיכות תופיע כאן ]</Text>
+                                <Text style={styles.mapSubText}>מחפש '{task.locationQuery}' באזורך...</Text>
+                            </View>
+
+                            <TouchableOpacity style={styles.navBtn}>
+                                <Text style={styles.navBtnText}>📍 הצג עסקים קרובים ברשימה</Text>
+                            </TouchableOpacity>
+                        </View>
+                    ) : null}
+
+                    {/* --- פעולת הליבה (CTA) --- */}
+                    <View style={styles.bottomActions}>
+                        <TouchableOpacity
+                            style={[styles.mainCtaBtn, { backgroundColor: task.isCompleted ? '#f3f4f6' : '#2f855a' }]}
+                            onPress={() => onToggle(task)}
+                        >
+                            <Text style={[styles.mainCtaText, { color: task.isCompleted ? '#4b5563' : '#fff' }]}>
+                                {task.isCompleted ? '↩️ סמן כלא הושלם (החזר לביצוע)' : '✓ סמן משימה כהושלמה'}
+                            </Text>
+                        </TouchableOpacity>
+
                         <TouchableOpacity style={styles.closeBtn} onPress={onClose}>
                             <Text style={styles.closeBtnText}>סגור</Text>
                         </TouchableOpacity>
-
                     </View>
+
                 </View>
             </View>
         </Modal>
@@ -70,90 +96,177 @@ export default function TaskDetailModal({ visible, task, onClose, onToggle, onDe
 const styles = StyleSheet.create({
     overlay: {
         flex: 1,
-        backgroundColor: 'rgba(0,0,0,0.5)', // רקע חצי שקוף וכהה
-        justifyContent: 'center',
-        alignItems: 'center',
-        padding: 20
+        backgroundColor: 'rgba(0,0,0,0.5)', // רקע חצי שקוף
+        justifyContent: 'flex-end', // מצמיד את התוכן לתחתית
     },
-    card: {
-        width: '100%',
+    backgroundDismiss: {
+        flex: 1, // תופס את כל החלל הריק למעלה כדי לאפשר סגירה בלחיצה בחוץ
+    },
+    bottomSheet: {
         backgroundColor: '#fff',
-        borderRadius: 24, // פינות עגולות ומודרניות
-        padding: 25,
+        borderTopLeftRadius: 30,
+        borderTopRightRadius: 30,
+        paddingHorizontal: 25,
+        paddingTop: 15,
+        paddingBottom: Platform.OS === 'ios' ? 40 : 25, // ריווח בתחתית בהתאם למכשיר
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 10 },
-        shadowOpacity: 0.15,
-        shadowRadius: 15,
-        elevation: 10 // צל לאנדרואיד
+        shadowOffset: { width: 0, height: -5 },
+        shadowOpacity: 0.1,
+        shadowRadius: 10,
+        elevation: 20,
+    },
+    dragHandle: {
+        width: 50,
+        height: 5,
+        backgroundColor: '#e5e7eb',
+        borderRadius: 5,
+        alignSelf: 'center',
+        marginBottom: 20,
+    },
+    headerRow: {
+        flexDirection: 'row-reverse',
+        justifyContent: 'space-between',
+        alignItems: 'flex-start',
+        marginBottom: 15,
     },
     title: {
-        fontSize: 24,
+        flex: 1,
+        fontSize: 26,
         fontWeight: '900',
         color: '#1f2937',
-        textAlign: 'right', // יישור לימין לעברית
-        marginBottom: 15
+        textAlign: 'right',
+        marginLeft: 15, // רווח מהכפתורים
     },
     completedText: {
         textDecorationLine: 'line-through',
-        color: '#9ca3af'
+        color: '#9ca3af',
     },
-    detailsContainer: {
-        backgroundColor: '#f3f4f6', // רקע אפור בהיר לפרטים
-        padding: 15,
-        borderRadius: 12,
-        marginBottom: 25
+    iconActions: {
+        flexDirection: 'row-reverse',
+        gap: 10,
     },
-    detailText: {
+    iconBtn: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: '#f3f4f6',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    iconText: {
+        fontSize: 18,
+    },
+    badgesRow: {
+        flexDirection: 'row-reverse',
+        gap: 10,
+        marginBottom: 25,
+    },
+    badge: {
+        paddingVertical: 6,
+        paddingHorizontal: 14,
+        borderRadius: 20,
+    },
+    badgeText: {
+        fontSize: 14,
+        fontWeight: '700',
+    },
+    dateBadge: {
+        backgroundColor: '#f3f4f6',
+        paddingVertical: 6,
+        paddingHorizontal: 14,
+        borderRadius: 20,
+        borderWidth: 1,
+        borderColor: '#e5e7eb',
+    },
+    dateBadgeText: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#4b5563',
+    },
+    aiSection: {
+        backgroundColor: '#fdf4ff', // סגול-ורוד בהיר מאוד
+        borderRadius: 20,
+        padding: 20,
+        marginBottom: 25,
+        borderWidth: 1,
+        borderColor: '#f5d0fe',
+    },
+    aiTitle: {
         fontSize: 16,
+        fontWeight: '800',
+        color: '#a21caf',
+        textAlign: 'right',
+        marginBottom: 5,
+    },
+    aiText: {
+        fontSize: 15,
         color: '#4b5563',
         textAlign: 'right',
-        marginBottom: 8,
-        fontWeight: '500'
+        marginBottom: 15,
     },
-    actionsContainer: {
-        gap: 12 // רווח שווה בין כל הכפתורים
+    aiHighlight: {
+        fontWeight: 'bold',
+        color: '#86198f',
     },
-    actionBtn: {
-        paddingVertical: 14,
+    mapPlaceholder: {
+        height: 120,
+        backgroundColor: '#f3f4f6',
+        borderRadius: 16,
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: '#e5e7eb',
+        borderStyle: 'dashed',
+        marginBottom: 15,
+    },
+    mapText: {
+        fontSize: 15,
+        fontWeight: 'bold',
+        color: '#9ca3af',
+    },
+    mapSubText: {
+        fontSize: 13,
+        color: '#9ca3af',
+        marginTop: 5,
+    },
+    navBtn: {
+        backgroundColor: '#fff',
+        paddingVertical: 10,
         borderRadius: 12,
         alignItems: 'center',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 3,
-        elevation: 2
+        borderWidth: 1,
+        borderColor: '#e5e7eb',
     },
-    rowButtons: {
-        flexDirection: 'row-reverse', // מסדר את הכפתורים מימין לשמאל
-        justifyContent: 'space-between',
-        gap: 12
+    navBtnText: {
+        color: '#4b5563',
+        fontWeight: 'bold',
+        fontSize: 14,
     },
-    halfBtn: {
-        flex: 1,
-        paddingVertical: 14,
-        borderRadius: 12,
+    bottomActions: {
+        marginTop: 10,
+    },
+    mainCtaBtn: {
+        paddingVertical: 18,
+        borderRadius: 16,
         alignItems: 'center',
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 3,
-        elevation: 2
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.15,
+        shadowRadius: 5,
+        elevation: 4,
+        marginBottom: 12,
     },
-    btnText: {
-        color: '#fff',
-        fontSize: 16,
-        fontWeight: 'bold'
+    mainCtaText: {
+        fontSize: 18,
+        fontWeight: '900',
     },
     closeBtn: {
-        paddingVertical: 14,
-        borderRadius: 12,
+        paddingVertical: 15,
         alignItems: 'center',
-        backgroundColor: '#e5e7eb', // אפור סולידי
-        marginTop: 5
     },
     closeBtnText: {
-        color: '#4b5563',
+        color: '#6b7280',
         fontSize: 16,
-        fontWeight: 'bold'
-    }
+        fontWeight: '600',
+    },
 });
