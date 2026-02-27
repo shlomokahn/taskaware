@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "211156230740",
+    "project_id": "taskaware-6a4a2",
+    "storage_bucket": "taskaware-6a4a2.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:211156230740:android:7c86e710377d7fde8e83c1",
+        "android_client_info": {
+          "package_name": "com.shlomo1155.MyMyHelloWorldAppApp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCJkeqPsV_-_NNipyOGhXCa7mdQfrVIB60"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

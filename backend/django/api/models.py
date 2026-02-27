@@ -10,7 +10,8 @@ class Task(models.Model):
     
     # שדות עתידיים להתראות ומיקום
     location_trigger = models.JSONField(null=True, blank=True)
-    
+    locationQuery = models.CharField(max_length=255, null=True, blank=True)
+
     def __str__(self):
         return self.title
 

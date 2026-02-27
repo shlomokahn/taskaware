@@ -7,6 +7,11 @@ from django.contrib.auth import authenticate
 from .models import Task, UserProfile
 from .serializers import TaskSerializer, UserSerializer
 from exponent_server_sdk import PushClient, PushMessage
+import google.generativeai as genai
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+import os
 
 # --- Authentication ---
 
@@ -106,3 +111,43 @@ class TaskViewSet(viewsets.ModelViewSet):
         except Exception as e:
             # במקרה שאין למשתמש עדיין פרופיל (האפליקציה טרם שלחה), נתעלם
             print("Could not send push notification:", str(e))
+
+
+
+# הגדרת המפתח של גוגל (שים לב להוסיף אותו לקובץ ה-.env שלך או להגדרות השרת)
+# genai.configure(api_key="הכנס_את_המפתח_שלך_כאן_או_משתנה_סביבה")
+genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated]) # מוודא שרק משתמש מחובר יכול לגשת
+def ask_ai(request):
+    title = request.data.get('title')
+    
+    if not title:
+        return Response({"error": "חסר שם משימה"}, status=400)
+
+    try:
+        # אתחול המודל
+        model = genai.GenerativeModel('gemini-2.5-flash')
+        
+        # הפרומפט שלנו
+        prompt = f"""אתה עוזר חכם לאפליקציית ניהול משימות. המשתמש ייתן לך תיאור של משימה, ועליך להחזיר *אך ורק* את סוג המקום (באנגלית או בעברית) שבו ניתן לבצע אותה, כדי שנוכל להעביר את זה לחיפוש ב-Google Maps API. אל תוסיף שום מילה נוספת, נקודה או הסבר.
+        דוגמה: עבור 'לקנות חלב' תחזיר 'סופרמרקט'.
+        עבור 'לקחת חבילה' תחזיר 'דואר'.
+        עבור 'להוציא כסף' תחזיר 'כספומט'.
+        המשימה: '{title}'"""
+
+        # קריאה למודל
+        result = model.generate_content(prompt)
+        location_query = result.text.strip()
+        
+        # מנקה נקודה בסוף אם המודל הוסיף בטעות
+        if location_query.endswith('.'):
+            location_query = location_query[:-1]
+
+        print(f"AI Answered: {location_query} for task: {title}")
+        return Response({"locationQuery": location_query})
+
+    except Exception as e:
+        print("Gemini API Error:", e)
+        return Response({"error": "שגיאה בפנייה למודל ה-AI"}, status=500)

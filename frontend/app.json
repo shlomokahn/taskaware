@@ -1,20 +1,21 @@
 {
   "expo": {
-    "name": "MyHelloWorldApp",
+    "name": "MyMyHelloWorldAppApp",
     "slug": "MyHelloWorldApp",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./icon.png",
-    "scheme": "myhelloworldapp",
+    "scheme": "mymyhelloworldappapp",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true
     },
     "android": {
-      "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false,
-      "package": "com.shlomo1155.MyHelloWorldApp"
+        "edgeToEdgeEnabled": true,
+        "predictiveBackGestureEnabled": false,
+        "package": "com.shlomo1155.MyMyHelloWorldAppApp",
+        "googleServicesFile": "./google-services.json"
     },
     "web": {
       "output": "static",
@@ -46,6 +47,7 @@
       "eas": {
         "projectId": "24e2be65-d267-48fc-a4a1-0b4fbbe694d6"
       }
-    }
+    },
+    "owner": "shlomo1155"
   }
 }

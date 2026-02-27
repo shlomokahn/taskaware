@@ -3,136 +3,133 @@ import {
     Modal,
     View,
     Text,
-    StyleSheet,
-    TouchableOpacity,
     TextInput,
-    Dimensions,
-    ActivityIndicator
+    TouchableOpacity,
+    StyleSheet,
+    KeyboardAvoidingView,
+    Platform
 } from 'react-native';
-
-const { width } = Dimensions.get('window');
 
 export default function EditTask({ visible, task, onClose, onSave }) {
     const [title, setTitle] = useState('');
-    const [saving, setSaving] = useState(false);
 
-    // עדכון הכותרת כשהמשימה משתנה
+    // מעדכן את השדה ברגע שפותחים את המודל עם משימה ספציפית
     useEffect(() => {
         if (task) {
-            setTitle(task.title || '');
+            setTitle(task.title);
         }
     }, [task]);
 
-    const handleSave = async () => {
-        const trimmedTitle = title.trim();
-        if (!trimmedTitle) {
-            alert('כותרת לא יכולה להיות ריקה');
-            return;
-        }
+    if (!task) return null;
 
-        setSaving(true);
-        try {
-            // הוספת בדיקת תקינות לפני קריאה לפונקציה
-            if (onSave && task && task._id) {
-                await onSave(task._id, trimmedTitle);
-                onClose();
-            }
-        } catch (err) {
-            console.error("Save error:", err);
-            alert('שגיאה בשמירה');
-        } finally {
-            setSaving(false);
+    const handleSave = () => {
+        if (title.trim()) {
+            onSave(task._id, title.trim());
         }
     };
 
-    if (!task) return null;
-
     return (
-        <Modal
-            animationType="slide"
-            transparent={true}
-            visible={visible}
-            onRequestClose={onClose}
-        >
-            <View style={styles.centeredView}>
-                <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={onClose} />
+        <Modal transparent visible={visible} animationType="fade" onRequestClose={onClose}>
+            {/* KeyboardAvoidingView מוודא שהמקלדת לא תסתיר את המודל */}
+            <KeyboardAvoidingView
+                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                style={styles.overlay}
+            >
+                <View style={styles.card}>
+                    <Text style={styles.headerTitle}>עריכת משימה</Text>
 
-                <View style={styles.modalView}>
-                    <Text style={styles.modalTitle}>עריכת משימה ✏️</Text>
-                    <View style={styles.divider} />
-
-                    <Text style={styles.label}>כותרת:</Text>
                     <TextInput
                         style={styles.input}
-                        placeholder="הכנס כותרת חדשה"
-                        placeholderTextColor="#9ca3af"
                         value={title}
                         onChangeText={setTitle}
-                        multiline={true}
-                        maxLength={200}
+                        placeholder="שם המשימה..."
+                        autoFocus // מקפיץ את המקלדת אוטומטית
+                        selectionColor="#2f855a"
                     />
 
-                    <Text style={styles.charCount}>{title.length}/200</Text>
-
-                    <View style={styles.actions}>
-                        <TouchableOpacity
-                            style={[styles.btn, styles.btnCancel]}
-                            onPress={onClose}
-                            disabled={saving}
-                        >
-                            <Text style={styles.btnTextDark}>ביטול</Text>
+                    <View style={styles.buttonRow}>
+                        {/* כפתור שמירה - מודגש וירוק */}
+                        <TouchableOpacity style={[styles.btn, styles.saveBtn]} onPress={handleSave}>
+                            <Text style={styles.saveBtnText}>שמור שינויים</Text>
                         </TouchableOpacity>
 
-                        <TouchableOpacity
-                            style={[styles.btn, styles.btnSave]}
-                            onPress={handleSave}
-                            disabled={saving}
-                        >
-                            {saving ? (
-                                <ActivityIndicator color="#fff" />
-                            ) : (
-                                <Text style={styles.btnTextWhite}>שמור</Text>
-                            )}
+                        {/* כפתור ביטול - אפור וסולידי */}
+                        <TouchableOpacity style={[styles.btn, styles.cancelBtn]} onPress={onClose}>
+                            <Text style={styles.cancelBtnText}>ביטול</Text>
                         </TouchableOpacity>
                     </View>
                 </View>
-            </View>
+            </KeyboardAvoidingView>
         </Modal>
     );
 }
 
 const styles = StyleSheet.create({
-    centeredView: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-    backdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)' },
-    modalView: {
-        width: width * 0.85,
-        backgroundColor: 'white',
-        borderRadius: 20,
+    overlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.5)', // רקע חצי שקוף
+        justifyContent: 'center',
+        paddingHorizontal: 20
+    },
+    card: {
+        backgroundColor: '#fff',
+        borderRadius: 24, // פינות מודרניות כמו בשאר האפליקציה
         padding: 25,
-        alignItems: 'center',
-        elevation: 5,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.15,
+        shadowRadius: 15,
+        elevation: 10
     },
-    modalTitle: { fontSize: 22, fontWeight: 'bold', marginBottom: 15, textAlign: 'center', color: '#1f2937' },
-    divider: { height: 1, backgroundColor: '#e5e7eb', width: '100%', marginBottom: 20 },
-    label: { fontSize: 16, fontWeight: '600', color: '#6b7280', marginBottom: 8, width: '100%', textAlign: 'right' },
+    headerTitle: {
+        fontSize: 22,
+        fontWeight: '800',
+        color: '#1f2937',
+        textAlign: 'right', // יישור לימין לעברית
+        marginBottom: 20
+    },
     input: {
-        width: '100%',
-        minHeight: 80,
+        height: 55,
+        backgroundColor: '#f9fafb',
+        borderRadius: 12,
+        paddingHorizontal: 15,
         borderWidth: 1,
-        borderColor: '#d1d5db',
-        borderRadius: 10,
-        paddingHorizontal: 12,
-        paddingVertical: 10,
+        borderColor: '#e5e7eb',
+        textAlign: 'right',
         fontSize: 16,
-        color: '#111827',
-        textAlignVertical: 'top',
-        backgroundColor: '#f9fafb'
+        marginBottom: 25,
+        color: '#111827'
     },
-    charCount: { fontSize: 12, color: '#9ca3af', marginBottom: 20, width: '100%', textAlign: 'left' },
-    actions: { width: '100%', flexDirection: 'row', gap: 12, justifyContent: 'center' },
-    btn: { paddingVertical: 12, paddingHorizontal: 24, borderRadius: 10, alignItems: 'center', justifyContent: 'center', minWidth: 100 },
-    btnCancel: { backgroundColor: '#e5e7eb', borderWidth: 1, borderColor: '#d1d5db' },
-    btnSave: { backgroundColor: '#10b981' },
-    btnTextWhite: { fontSize: 16, fontWeight: '600', color: '#fff' },
-    btnTextDark: { fontSize: 16, fontWeight: '600', color: '#1f2937' }
+    buttonRow: {
+        flexDirection: 'row-reverse', // מסדר את הכפתורים: "שמור" בימין, "ביטול" בשמאל
+        gap: 12
+    },
+    btn: {
+        flex: 1,
+        paddingVertical: 14,
+        borderRadius: 12,
+        alignItems: 'center',
+        justifyContent: 'center'
+    },
+    saveBtn: {
+        backgroundColor: '#2f855a',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 3,
+        elevation: 2
+    },
+    saveBtnText: {
+        color: '#fff',
+        fontSize: 16,
+        fontWeight: 'bold'
+    },
+    cancelBtn: {
+        backgroundColor: '#f3f4f6'
+    },
+    cancelBtnText: {
+        color: '#4b5563',
+        fontSize: 16,
+        fontWeight: 'bold'
+    }
 });

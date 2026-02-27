@@ -1,87 +1,66 @@
 ﻿import React from 'react';
-import {
-    Modal,
-    View,
-    Text,
-    StyleSheet,
-    TouchableOpacity,
-    Dimensions
-} from 'react-native';
-
-const { width } = Dimensions.get('window');
+import { Modal, View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 
 export default function TaskDetailModal({ visible, task, onClose, onToggle, onDelete, onEdit }) {
-    // מניעת רינדור אם אין משימה
     if (!task) return null;
 
-    // פונקציית עזר פנימית להצגת תאריך ללא קריסה (מונע את המסך הלבן)
-    const safeFormatDate = (dateString) => {
-        if (!dateString) return "לא צוין";
-        const date = new Date(dateString);
-        if (isNaN(date.getTime())) return "תאריך לא תקין";
-
-        return `${date.toLocaleDateString('he-IL')} בשעה ${date.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })}`;
+    // פונקציה לעיצוב התאריך לתצוגה נוחה
+    const formatDate = (dateString) => {
+        if (!dateString) return 'ללא תאריך';
+        const d = new Date(dateString);
+        return isNaN(d.getTime()) ? 'תאריך לא תקין' : d.toLocaleString('he-IL', {
+            day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
+        });
     };
 
     return (
-        <Modal
-            animationType="slide"
-            transparent={true}
-            visible={visible}
-            onRequestClose={onClose}
-        >
-            <View style={styles.centeredView}>
-                <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={onClose} />
+        <Modal transparent visible={visible} animationType="fade" onRequestClose={onClose}>
+            <View style={styles.overlay}>
+                <View style={styles.card}>
 
-                <View style={styles.modalView}>
-                    <Text style={styles.modalTitle}>{task.title || "משימה ללא כותרת"}</Text>
+                    {/* כותרת המשימה */}
+                    <Text style={[styles.title, task.isCompleted && styles.completedText]}>
+                        {task.title}
+                    </Text>
 
-                    <View style={styles.statusContainer}>
-                        <Text style={styles.label}>סטטוס:</Text>
-                        <Text style={[styles.statusValue, { color: task.isCompleted ? '#10b981' : '#f59e0b' }]}>
-                            {task.isCompleted ? 'הושלם ✓' : 'ממתין לביצוע ⏳'}
+                    {/* אזור פרטי המשימה (תאריך וסטטוס) */}
+                    <View style={styles.detailsContainer}>
+                        <Text style={styles.detailText}>⏰ מועד: {formatDate(task.dueDate)}</Text>
+                        <Text style={styles.detailText}>
+                            📌 סטטוס: <Text style={{ color: task.isCompleted ? '#2f855a' : '#d97706', fontWeight: 'bold' }}>
+                                {task.isCompleted ? 'הושלם' : 'בתהליך'}
+                            </Text>
                         </Text>
                     </View>
 
-                    <Text style={styles.dateText}>
-                        נוצר ב: {safeFormatDate(task.createdAt)}
-                    </Text>
+                    {/* אזור הכפתורים */}
+                    <View style={styles.actionsContainer}>
 
-                    <View style={styles.divider} />
-
-                    <View style={styles.actions}>
+                        {/* כפתור שינוי סטטוס גדול */}
                         <TouchableOpacity
-                            style={[styles.btn, styles.btnToggle, task.isCompleted ? styles.btnOutline : styles.btnFill]}
-                            onPress={() => onToggle && onToggle(task)}
+                            style={[styles.actionBtn, { backgroundColor: task.isCompleted ? '#f59e0b' : '#2f855a' }]}
+                            onPress={() => onToggle(task)}
                         >
-                            <Text style={[styles.btnText, task.isCompleted ? styles.textDark : styles.textWhite]}>
-                                {task.isCompleted ? 'סמן כלא בוצע' : 'סמן כבוצע'}
-                            </Text>
+                            <Text style={styles.btnText}>{task.isCompleted ? 'סמן כלא הושלם' : 'סמן כהושלם ✓'}</Text>
                         </TouchableOpacity>
 
-                        <TouchableOpacity
-                            style={[styles.btn, styles.btnEdit]}
-                            onPress={() => onEdit && onEdit(task)}
-                        >
-                            <Text style={styles.btnTextWhite}>ערוך משימה ✏️</Text>
+                        {/* שורת כפתורים: ערוך ומחק */}
+                        <View style={styles.rowButtons}>
+                            <TouchableOpacity style={[styles.halfBtn, { backgroundColor: '#3b82f6' }]} onPress={() => onEdit(task)}>
+                                <Text style={styles.btnText}>✏️ ערוך</Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity style={[styles.halfBtn, { backgroundColor: '#ef4444' }]} onPress={() => onDelete(task._id)}>
+                                <Text style={styles.btnText}>🗑️ מחק</Text>
+                            </TouchableOpacity>
+                        </View>
+
+                        {/* כפתור סגירה סולידי */}
+                        <TouchableOpacity style={styles.closeBtn} onPress={onClose}>
+                            <Text style={styles.closeBtnText}>סגור</Text>
                         </TouchableOpacity>
 
-                        <TouchableOpacity
-                            style={[styles.btn, styles.btnDelete]}
-                            onPress={() => {
-                                if (onDelete) {
-                                    onDelete(task._id);
-                                    onClose();
-                                }
-                            }}
-                        >
-                            <Text style={styles.btnTextWhite}>מחק משימה 🗑️</Text>
-                        </TouchableOpacity>
                     </View>
-
-                    <TouchableOpacity style={styles.closeBtn} onPress={onClose}>
-                        <Text style={styles.closeText}>סגור</Text>
-                    </TouchableOpacity>
                 </View>
             </View>
         </Modal>
@@ -89,33 +68,92 @@ export default function TaskDetailModal({ visible, task, onClose, onToggle, onDe
 }
 
 const styles = StyleSheet.create({
-    centeredView: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-    backdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)' },
-    modalView: {
-        width: width * 0.85,
-        backgroundColor: 'white',
-        borderRadius: 20,
-        padding: 25,
+    overlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.5)', // רקע חצי שקוף וכהה
+        justifyContent: 'center',
         alignItems: 'center',
-        elevation: 5,
+        padding: 20
     },
-    modalTitle: { fontSize: 22, fontWeight: 'bold', marginBottom: 15, textAlign: 'center', color: '#1f2937' },
-    statusContainer: { flexDirection: 'row', alignItems: 'center', marginBottom: 10, gap: 8 },
-    label: { fontSize: 16, color: '#6b7280' },
-    statusValue: { fontSize: 16, fontWeight: '700' },
-    dateText: { fontSize: 12, color: '#9ca3af', marginBottom: 20 },
-    divider: { height: 1, backgroundColor: '#e5e7eb', width: '100%', marginBottom: 20 },
-    actions: { width: '100%', gap: 12, marginBottom: 20 },
-    btn: { paddingVertical: 12, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-    btnToggle: { borderColor: '#10b981', borderWidth: 1 },
-    btnFill: { backgroundColor: '#10b981' },
-    btnOutline: { backgroundColor: 'transparent' },
-    btnDelete: { backgroundColor: '#ef4444' },
-    btnEdit: { backgroundColor: '#3b82f6' },
-    btnText: { fontSize: 16, fontWeight: '600' },
-    btnTextWhite: { fontSize: 16, fontWeight: '600', color: '#fff' },
-    textWhite: { color: '#fff' },
-    textDark: { color: '#1f2937' },
-    closeBtn: { padding: 10 },
-    closeText: { color: '#6b7280', fontSize: 16 }
+    card: {
+        width: '100%',
+        backgroundColor: '#fff',
+        borderRadius: 24, // פינות עגולות ומודרניות
+        padding: 25,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.15,
+        shadowRadius: 15,
+        elevation: 10 // צל לאנדרואיד
+    },
+    title: {
+        fontSize: 24,
+        fontWeight: '900',
+        color: '#1f2937',
+        textAlign: 'right', // יישור לימין לעברית
+        marginBottom: 15
+    },
+    completedText: {
+        textDecorationLine: 'line-through',
+        color: '#9ca3af'
+    },
+    detailsContainer: {
+        backgroundColor: '#f3f4f6', // רקע אפור בהיר לפרטים
+        padding: 15,
+        borderRadius: 12,
+        marginBottom: 25
+    },
+    detailText: {
+        fontSize: 16,
+        color: '#4b5563',
+        textAlign: 'right',
+        marginBottom: 8,
+        fontWeight: '500'
+    },
+    actionsContainer: {
+        gap: 12 // רווח שווה בין כל הכפתורים
+    },
+    actionBtn: {
+        paddingVertical: 14,
+        borderRadius: 12,
+        alignItems: 'center',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 3,
+        elevation: 2
+    },
+    rowButtons: {
+        flexDirection: 'row-reverse', // מסדר את הכפתורים מימין לשמאל
+        justifyContent: 'space-between',
+        gap: 12
+    },
+    halfBtn: {
+        flex: 1,
+        paddingVertical: 14,
+        borderRadius: 12,
+        alignItems: 'center',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 3,
+        elevation: 2
+    },
+    btnText: {
+        color: '#fff',
+        fontSize: 16,
+        fontWeight: 'bold'
+    },
+    closeBtn: {
+        paddingVertical: 14,
+        borderRadius: 12,
+        alignItems: 'center',
+        backgroundColor: '#e5e7eb', // אפור סולידי
+        marginTop: 5
+    },
+    closeBtnText: {
+        color: '#4b5563',
+        fontSize: 16,
+        fontWeight: 'bold'
+    }
 });

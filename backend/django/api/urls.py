@@ -31,6 +31,6 @@ urlpatterns = [
     
     # הנתיב החדש לשמירת הטוקן:
     path('save-push-token/', views.save_push_token, name='save_push_token'),
-
+    path('ask-ai/', views.ask_ai, name='ask-ai'),
     path('', include(router.urls)),
 ]
