@@ -7,11 +7,8 @@ from django.contrib.auth import authenticate
 from .models import Task, UserProfile
 from .serializers import TaskSerializer, UserSerializer
 from exponent_server_sdk import PushClient, PushMessage
-import google.generativeai as genai
+from google import genai
 import os
-
-# הגדרת המפתח של גוגל
-genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
 
 # --- פונקציית עזר לשליחת התראות (Helper) ---
 
@@ -124,15 +121,21 @@ def ask_ai(request):
         return Response({"error": "חסר שם משימה"}, status=400)
 
     try:
-        # שימוש במודל עדכני (1.5-flash הוא מהיר וחינמי)
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        # אתחול הקליינט החדש של גוגל
+        client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
         
         prompt = f"""אתה עוזר חכם לאפליקציית ניהול משימות. המשתמש ייתן לך תיאור של משימה, ועליך להחזיר *אך ורק* את סוג המקום (באנגלית או בעברית) שבו ניתן לבצע אותה. אל תוסיף שום הסבר.
         דוגמה: עבור 'לקנות חלב' תחזיר 'סופרמרקט'.
         המשימה: '{title}'"""
 
-        result = model.generate_content(prompt)
-        location_query = result.text.strip().replace('.', '')
+        # קריאה למודל בסינטקס החדש
+        response = client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=prompt,
+        )
+        
+        # ניקוי התשובה
+        location_query = response.text.strip().replace('.', '')
 
         # --- הוספת שליחת פוש כשה-AI מסיים לנתח ---
         try:
@@ -140,15 +143,15 @@ def ask_ai(request):
             if profile.expo_push_token:
                 send_expo_push_notification(
                     expo_token=profile.expo_push_token,
-                    title="ה-AI ניתח את המשימה! ✨",
-                    body=f"עבור '{title}', כדאי לך לחפש ב: {location_query}"
+                    title="ה-AI מצא מיקום! 📍",
+                    body=f"עבור המשימה '{title}', חפש באזור: {location_query}"
                 )
-        except:
-            pass # אם אין טוקן, פשוט נמשיך בלי לשלוח פוש
+        except Exception as e:
+            print("Push error in AI:", str(e))
 
         print(f"AI Answered: {location_query}")
         return Response({"locationQuery": location_query})
 
     except Exception as e:
-        print("Gemini API Error:", e)
-        return Response({"error": f"שגיאה בפנייה למודל ה-AI: {str(e)}"}, status=500)
+        print("Gemini API Error details:", str(e))
+        return Response({"error": "שגיאה בפנייה למודל ה-AI"}, status=500)
