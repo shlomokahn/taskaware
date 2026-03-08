@@ -24,7 +24,6 @@ import DateTimePicker, { DateTimePickerAndroid } from '@react-native-community/d
 import * as Device from 'expo-device';
 import Constants from 'expo-constants';
 
-// הגדרת התנהגות התראות כשהאפליקציה פתוחה
 Notifications.setNotificationHandler({
     handleNotification: async () => ({
         shouldShowBanner: true,
@@ -41,17 +40,15 @@ export default function App() {
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
 
-    // סטייט ליצירת משימה
     const [newTitle, setNewTitle] = useState('');
     const [dueDate, setDueDate] = useState(new Date());
     const [creating, setCreating] = useState(false);
-    const [isSmartTask, setIsSmartTask] = useState(false); // הסטייט ל-AI
+    const [isSmartTask, setIsSmartTask] = useState(false);
 
     const [showIOSPicker, setShowIOSPicker] = useState(false);
     const [selectedTask, setSelectedTask] = useState(null);
     const [editingTask, setEditingTask] = useState(null);
 
-    // התחברות
     const [token, setToken] = useState(null);
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
@@ -60,7 +57,7 @@ export default function App() {
 
     const { location } = useLocationSync(API_BASE, token);
 
-    // --- 1. ניהול התראות ---
+    // --- התראות ---
     useEffect(() => {
         Notifications.cancelAllScheduledNotificationsAsync();
         async function setupPushNotifications() {
@@ -102,15 +99,9 @@ export default function App() {
 
     const scheduleNotification = async (taskTitle, date) => {
         const triggerDate = new Date(date);
-        const now = new Date();
-
-        if (triggerDate <= now) {
-            console.log("הזמן עבר, מדלג על תזמון...");
-            return null;
-        }
-
+        if (triggerDate <= new Date()) return null;
         try {
-            const id = await Notifications.scheduleNotificationAsync({
+            return await Notifications.scheduleNotificationAsync({
                 content: {
                     title: "תזכורת למשימה! 🔔",
                     body: taskTitle,
@@ -118,12 +109,11 @@ export default function App() {
                     priority: Notifications.AndroidNotificationPriority.HIGH,
                 },
                 trigger: {
-                    type: Notifications.SchedulableTriggerInputTypes.DATE, // ✅ חובה ב-SDK החדש
+                    type: Notifications.SchedulableTriggerInputTypes.DATE,
                     date: triggerDate,
-                    channelId: 'default', // ✅ נדרש ל-Android
+                    channelId: 'default',
                 },
             });
-            return id;
         } catch (e) {
             console.error("שגיאה בתזמון ההתראה:", e);
             return null;
@@ -134,7 +124,7 @@ export default function App() {
         if (notifId) await Notifications.cancelScheduledNotificationAsync(notifId);
     };
 
-    // --- 2. בחירת תאריך משימה חדשה ---
+    // --- בחירת תאריך למשימה חדשה ---
     const showAndroidPicker = () => {
         DateTimePickerAndroid.open({
             value: dueDate, mode: 'date', display: 'calendar',
@@ -151,66 +141,7 @@ export default function App() {
         });
     };
 
-    // --- לוגיקה לעריכת תאריך מהירה (במודל החדש) ---
-    const updateTaskDate = async (task) => {
-        // קודם כל סוגרים את מודל הפרטים כדי שהלוח שנה לא יוסתר
-        setSelectedTask(null);
-
-        const currentDate = new Date(task.dueDate || Date.now());
-
-        if (Platform.OS === 'android') {
-            DateTimePickerAndroid.open({
-                value: currentDate,
-                mode: 'date',
-                display: 'calendar',
-                onChange: (event, selectedDate) => {
-                    if (event.type === 'set' && selectedDate) {
-                        // אם בחר תאריך, פותחים את בחירת השעה
-                        DateTimePickerAndroid.open({
-                            value: selectedDate,
-                            mode: 'time',
-                            is24Hour: true,
-                            display: 'clock',
-                            onChange: async (timeEvent, finalDate) => {
-                                if (timeEvent.type === 'set' && finalDate) {
-                                    // בודקים שהתאריך בעתיד
-                                    if (finalDate <= new Date()) {
-                                        Alert.alert("תאריך לא תקין", "אנא בחר תאריך ושעה בעתיד");
-                                        return;
-                                    }
-                                    try {
-                                        // 1. ביטול ההתראה הישנה
-                                        if (task.notificationId) {
-                                            await cancelNotification(task.notificationId);
-                                        }
-
-                                        // 2. תזמון ההתראה החדשה
-                                        const newNotifId = await scheduleNotification(task.title, finalDate);
-
-                                        // 3. עדכון השרת והסטייט (זה גם ירענן את הרשימה במסך!)
-                                        await handleUpdateTask(task._id || task.id, {
-                                            dueDate: finalDate.toISOString(),
-                                            notificationId: newNotifId
-                                        });
-
-                                        Alert.alert("עודכן!", "מועד המשימה וההתראה שונו בהצלחה.");
-                                    } catch (err) {
-                                        console.error("שגיאה בעדכון הזמן:", err);
-                                        Alert.alert("שגיאה", "שגיאה בעדכון הזמן.");
-                                    }
-                                }
-                            },
-                        });
-                    }
-                },
-            });
-        } else {
-            // אם תצטרך תמיכה ל-iOS בהמשך נוכל לשלב את הפיקר כאן
-            Alert.alert("הודעה", "עריכת זמן מהירה נתמכת כרגע באנדרואיד. במכשירי iOS נא להיכנס לעריכה המלאה.");
-        }
-    };
-
-    // --- 3. לוגיקה של משימות ---
+    // --- משימות ---
     const fetchTasks = useCallback(async () => {
         if (!token) return;
         try {
@@ -231,29 +162,16 @@ export default function App() {
 
     useEffect(() => { if (token) fetchTasks(); }, [token, fetchTasks]);
 
-    // הפונקציה האמיתית שמדברת עם השרת שלך (Django) שמדבר עם Gemini
     const fetchLocationFromAI = async (taskTitle) => {
         try {
-            console.log(`שולח ל-AI בקשה למיקום עבור: ${taskTitle}...`);
             const res = await fetch(`${API_BASE}/api/ask-ai/`, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Token ${token}`
-                },
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Token ${token}` },
                 body: JSON.stringify({ title: taskTitle }),
             });
-
-            if (!res.ok) {
-                console.error("שגיאה מהשרת:", await res.text());
-                return null;
-            }
-
+            if (!res.ok) return null;
             const data = await res.json();
-            if (data.locationQuery) {
-                return data.locationQuery;
-            }
-            return null;
+            return data.locationQuery || null;
         } catch (error) {
             console.error("שגיאה בקבלת מיקום מה-AI:", error);
             return null;
@@ -264,7 +182,6 @@ export default function App() {
         const title = newTitle.trim();
         if (!title || !token) return;
 
-        // מוודאים שזמן המשימה בעתיד
         if (dueDate <= new Date()) {
             Alert.alert("תאריך לא תקין", "אנא בחר תאריך ושעה בעתיד");
             return;
@@ -273,18 +190,12 @@ export default function App() {
         setCreating(true);
         try {
             let suggestedLocation = '';
-
-            // בודק אם המשתמש סימן שזו משימה חכמה
             if (isSmartTask) {
                 suggestedLocation = await fetchLocationFromAI(title);
-                if (suggestedLocation) {
-                    console.log(`ה-AI מציע לבצע את זה ב: ${suggestedLocation}`);
-                }
             }
 
             const notifId = await scheduleNotification(title, dueDate);
 
-            // שמירת המשימה במסד הנתונים
             const res = await fetch(`${API_BASE}/api/tasks/`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Token ${token}` },
@@ -296,18 +207,13 @@ export default function App() {
                 }),
             });
 
-            if (!res.ok) {
-                throw new Error("נכשל בשמירת המשימה");
-            }
+            if (!res.ok) throw new Error("נכשל בשמירת המשימה");
 
             const created = await res.json();
             setTasks(prev => [created, ...prev]);
-
-            // איפוס השדות
             setNewTitle('');
             setDueDate(new Date());
             setIsSmartTask(false);
-
         } catch (err) {
             Alert.alert("שגיאה", "שגיאה בשמירת המשימה");
             console.error(err);
@@ -324,7 +230,7 @@ export default function App() {
                 body: JSON.stringify(fields),
             });
             const updated = await res.json();
-            setTasks(prev => prev.map(t => t._id === taskId ? updated : t));
+            setTasks(prev => prev.map(t => (t._id || t.id) === taskId ? updated : t));
             return updated;
         } catch (err) { console.error(err); }
     };
@@ -337,7 +243,7 @@ export default function App() {
         });
     };
 
-    // --- 4. מסך התחברות ---
+    // --- מסך התחברות ---
     if (!token) {
         return (
             <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.loginContainer}>
@@ -348,10 +254,7 @@ export default function App() {
                     <TouchableOpacity
                         style={styles.loginBtn} disabled={isAuthLoading}
                         onPress={async () => {
-                            if (!username || !password) {
-                                Alert.alert("שגיאה", "אנא הזן שם משתמש וסיסמה");
-                                return;
-                            }
+                            if (!username || !password) { Alert.alert("שגיאה", "אנא הזן שם משתמש וסיסמה"); return; }
                             setIsAuthLoading(true);
                             const path = isLoginMode ? '/api/login/' : '/api/signup/';
                             try {
@@ -360,17 +263,9 @@ export default function App() {
                                     headers: { 'Content-Type': 'application/json' },
                                     body: JSON.stringify({ username, password }),
                                 });
-
                                 const textResponse = await res.text();
-
-                                if (!res.ok) {
-                                    console.error("השרת החזיר שגיאה (HTML/Text):", textResponse);
-                                    Alert.alert("שגיאה מהשרת", "הבקשה נכשלה, בדוק טרמינל");
-                                    return;
-                                }
-
+                                if (!res.ok) { Alert.alert("שגיאה מהשרת", "הבקשה נכשלה"); return; }
                                 const data = JSON.parse(textResponse);
-
                                 if (data.token) {
                                     await AsyncStorage.setItem('userToken', data.token);
                                     setToken(data.token);
@@ -378,7 +273,6 @@ export default function App() {
                                     Alert.alert("שגיאה", "פרטי התחברות שגויים");
                                 }
                             } catch (e) {
-                                console.error("Login detailed error:", e);
                                 Alert.alert("שגיאת רשת", "חיבור לשרת נכשל");
                             } finally {
                                 setIsAuthLoading(false);
@@ -395,10 +289,9 @@ export default function App() {
         );
     }
 
-    // --- 5. המסך הראשי של המשימות ---
+    // --- מסך ראשי ---
     return (
         <View style={styles.container}>
-            {/* Header */}
             <View style={styles.header}>
                 <Text style={styles.brand}>TaskAware</Text>
                 <TouchableOpacity style={styles.logoutBtn} onPress={() => { AsyncStorage.removeItem('userToken'); setToken(null); }}>
@@ -406,7 +299,7 @@ export default function App() {
                 </TouchableOpacity>
             </View>
 
-            {/* כרטיסיית הוספת משימה חדשה */}
+            {/* הוספת משימה */}
             <View style={styles.inputContainer}>
                 <View style={styles.inputRow}>
                     <TextInput
@@ -416,15 +309,12 @@ export default function App() {
                         onChangeText={setNewTitle}
                         placeholderTextColor="#9ca3af"
                     />
-
-                    {/* כפתור משימה חכמה */}
                     <TouchableOpacity
                         style={[styles.smartBtn, isSmartTask && styles.smartBtnActive]}
                         onPress={() => setIsSmartTask(!isSmartTask)}
                     >
                         <Text style={[styles.smartBtnText, isSmartTask && styles.smartBtnTextActive]}>✨ AI</Text>
                     </TouchableOpacity>
-
                     <TouchableOpacity style={styles.datePickerBtn} onPress={() => Platform.OS === 'android' ? showAndroidPicker() : setShowIOSPicker(true)}>
                         <Text style={{ fontSize: 22 }}>📅</Text>
                     </TouchableOpacity>
@@ -438,7 +328,7 @@ export default function App() {
                 </View>
             </View>
 
-            {/* iOS Picker Modal */}
+            {/* iOS Picker */}
             {Platform.OS === 'ios' && showIOSPicker && (
                 <Modal transparent animationType="slide">
                     <View style={styles.modalOverlay}>
@@ -452,7 +342,7 @@ export default function App() {
                 </Modal>
             )}
 
-            {/* רשימת המשימות */}
+            {/* רשימת משימות */}
             <Text style={styles.listTitle}>המשימות שלי</Text>
             <FlatList
                 data={tasks}
@@ -468,17 +358,13 @@ export default function App() {
                         style={[styles.taskRow, item.isCompleted && styles.taskRowCompleted]}
                         onPress={() => setSelectedTask(item)}
                     >
-                        {/* התוכן של המשימה */}
                         <View style={styles.taskContent}>
                             <Text style={[styles.taskTitle, item.isCompleted && styles.taskTitleCompleted]}>{item.title}</Text>
                             <Text style={styles.taskDate}>⏰ {formatDisplayDate(item.dueDate)}</Text>
-                            {/* מיקום מה-AI אם קיים */}
                             {item.locationQuery && (
                                 <Text style={styles.taskLocation}>📍 מומלץ לבצע ב: {item.locationQuery}</Text>
                             )}
                         </View>
-
-                        {/* עיגול סטטוס למשימה */}
                         <View style={[styles.statusCircle, item.isCompleted && styles.statusCircleCompleted]}>
                             {item.isCompleted && <Text style={styles.checkMark}>✓</Text>}
                         </View>
@@ -487,7 +373,7 @@ export default function App() {
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={fetchTasks} />}
             />
 
-            {/* המודל החדש (Bottom Sheet) */}
+            {/* מודל פרטי משימה */}
             <TaskDetailModal
                 visible={!!selectedTask}
                 task={selectedTask}
@@ -505,22 +391,32 @@ export default function App() {
                     setSelectedTask(null);
                 }}
                 onEdit={(task) => { setEditingTask(task); setSelectedTask(null); }}
-                // הקריאה לעריכת זמן מהירה!
-                onEditDate={(task) => updateTaskDate(task)}
             />
 
+            {/* מודל עריכה (שם + תאריך) */}
             <EditTask
                 visible={!!editingTask}
                 task={editingTask}
                 onClose={() => setEditingTask(null)}
-                onSave={async (id, title) => { await handleUpdateTask(id, { title }); setEditingTask(null); }}
+                onSave={async (id, title, newDueDate) => {
+                    // ביטול התראה ישנה ותזמון חדשה אם התאריך השתנה
+                    if (newDueDate && editingTask?.notificationId) {
+                        await cancelNotification(editingTask.notificationId);
+                    }
+                    const newNotifId = newDueDate ? await scheduleNotification(title, newDueDate) : editingTask?.notificationId;
+                    await handleUpdateTask(id, {
+                        title,
+                        ...(newDueDate && { dueDate: newDueDate }),
+                        ...(newNotifId && { notificationId: newNotifId }),
+                    });
+                    setEditingTask(null);
+                }}
             />
         </View>
     );
 }
 
 const styles = StyleSheet.create({
-    // התחברות
     loginContainer: { flex: 1, justifyContent: 'center', backgroundColor: '#f3f4f6', paddingHorizontal: 20 },
     loginCard: { backgroundColor: '#fff', padding: 25, borderRadius: 24, shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.1, shadowRadius: 15, elevation: 5 },
     loginBrand: { fontSize: 36, fontWeight: '900', textAlign: 'center', marginBottom: 30, color: '#2f855a' },
@@ -529,31 +425,25 @@ const styles = StyleSheet.create({
     loginBtnText: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
     switchModeText: { textAlign: 'center', marginTop: 20, color: '#4b5563', fontSize: 15, fontWeight: '600' },
 
-    // מסך ראשי
     container: { flex: 1, paddingTop: 60, paddingHorizontal: 20, backgroundColor: '#f3f4f6' },
     header: { flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center', marginBottom: 25 },
     brand: { fontSize: 32, fontWeight: '900', color: '#111827' },
     logoutBtn: { backgroundColor: '#fee2e2', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20 },
     logoutText: { color: '#ef4444', fontWeight: 'bold', fontSize: 14 },
 
-    // הוספת משימה
     inputContainer: { backgroundColor: '#fff', padding: 20, borderRadius: 24, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 10, elevation: 3, marginBottom: 30 },
     inputRow: { flexDirection: 'row-reverse', gap: 12, marginBottom: 15 },
     taskInput: { flex: 1, height: 55, backgroundColor: '#f9fafb', borderRadius: 16, paddingHorizontal: 15, borderWidth: 1, borderColor: '#e5e7eb', textAlign: 'right', fontSize: 16, color: '#1f2937' },
     datePickerBtn: { width: 55, height: 55, backgroundColor: '#f3f4f6', borderRadius: 16, justifyContent: 'center', alignItems: 'center' },
-
-    // עיצוב כפתור AI
     smartBtn: { width: 55, height: 55, backgroundColor: '#f3f4f6', borderRadius: 16, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: 'transparent' },
     smartBtnActive: { backgroundColor: '#fdf4ff', borderColor: '#d946ef' },
     smartBtnText: { fontSize: 14, fontWeight: 'bold', color: '#9ca3af' },
     smartBtnTextActive: { color: '#d946ef' },
-
     actionRow: { flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center' },
     dateInfo: { fontSize: 14, color: '#4b5563', fontWeight: '600' },
     addBtn: { backgroundColor: '#2f855a', paddingHorizontal: 20, height: 45, borderRadius: 16, justifyContent: 'center', alignItems: 'center' },
     addBtnText: { color: '#fff', fontSize: 15, fontWeight: 'bold' },
 
-    // רשימת משימות
     listTitle: { fontSize: 20, fontWeight: '800', color: '#374151', textAlign: 'right', marginBottom: 15 },
     taskRow: { flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#fff', padding: 18, borderRadius: 20, marginBottom: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 5, elevation: 2, borderWidth: 1, borderColor: 'transparent' },
     taskRowCompleted: { backgroundColor: '#f9fafb', borderColor: '#e5e7eb', elevation: 0 },
@@ -562,15 +452,12 @@ const styles = StyleSheet.create({
     taskTitleCompleted: { textDecorationLine: 'line-through', color: '#9ca3af' },
     taskDate: { fontSize: 13, color: '#6b7280', textAlign: 'right', marginBottom: 2 },
     taskLocation: { fontSize: 13, color: '#8b5cf6', textAlign: 'right', fontWeight: '600' },
-
-    // מעגל סטטוס סיום
     statusCircle: { width: 28, height: 28, borderRadius: 14, borderWidth: 2, borderColor: '#cbd5e1', justifyContent: 'center', alignItems: 'center' },
     statusCircleCompleted: { backgroundColor: '#2f855a', borderColor: '#2f855a' },
     checkMark: { color: '#fff', fontSize: 16, fontWeight: '900' },
 
-    // מצב ריק ו-Modal
     emptyState: { alignItems: 'center', marginTop: 40 },
     emptyStateText: { fontSize: 16, color: '#9ca3af', fontWeight: '600' },
     modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.4)' },
-    pickerContainer: { backgroundColor: 'white', padding: 20, borderTopLeftRadius: 20, borderTopRightRadius: 20 }
+    pickerContainer: { backgroundColor: 'white', padding: 20, borderTopLeftRadius: 20, borderTopRightRadius: 20 },
 });

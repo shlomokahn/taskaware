@@ -1,272 +1,311 @@
 ﻿import React from 'react';
-import { Modal, View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
+import { Modal, View, Text, StyleSheet, TouchableOpacity, Platform, ScrollView } from 'react-native';
 
-export default function TaskDetailModal({ visible, task, onClose, onToggle, onDelete, onEdit, onEditDate }) {
+export default function TaskDetailModal({ visible, task, onClose, onToggle, onDelete, onEdit }) {
     if (!task) return null;
 
-    // עיצוב תאריך מקוצר ונוח לתגית (למשל: 17:25, 27.02)
-    const formatCompactDate = (dateString) => {
-        if (!dateString) return 'ללא תאריך';
+    const formatDate = (dateString) => {
+        if (!dateString) return null;
         const d = new Date(dateString);
-        return isNaN(d.getTime()) ? 'תאריך שגוי' : d.toLocaleString('he-IL', {
-            day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'
-        });
+        if (isNaN(d.getTime())) return null;
+        const day = d.toLocaleDateString('he-IL', { day: '2-digit', month: 'short' });
+        const time = d.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
+        return { day, time };
     };
+
+    const dateInfo = formatDate(task.dueDate);
 
     return (
         <Modal transparent visible={visible} animationType="slide" onRequestClose={onClose}>
             <View style={styles.overlay}>
-                {/* לחיצה מחוץ לכרטיסייה תסגור אותה */}
-                <TouchableOpacity style={styles.backgroundDismiss} onPress={onClose} activeOpacity={1} />
+                <TouchableOpacity style={styles.backdrop} onPress={onClose} activeOpacity={1} />
 
-                <View style={styles.bottomSheet}>
-                    {/* פס קטן למעלה שמרמז שזו מגירה נגררת */}
-                    <View style={styles.dragHandle} />
+                <View style={styles.sheet}>
+                    <View style={styles.handle} />
+                    <View style={[styles.statusStrip, task.isCompleted ? styles.stripDone : styles.stripPending]} />
 
-                    {/* --- שורת כותרת ואייקונים --- */}
-                    <View style={styles.headerRow}>
-                        <Text style={[styles.title, task.isCompleted && styles.completedText]}>
-                            {task.title}
-                        </Text>
-                        <View style={styles.iconActions}>
-                            <TouchableOpacity style={styles.iconBtn} onPress={() => onEdit(task)}>
-                                <Text style={styles.iconText}>✏️</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity style={styles.iconBtn} onPress={() => onDelete(task._id || task.id)}>
-                                <Text style={styles.iconText}>🗑️</Text>
-                            </TouchableOpacity>
-                        </View>
-                    </View>
+                    <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
 
-                    {/* --- שורת תגיות (סטטוס וזמן) --- */}
-                    <View style={styles.badgesRow}>
-                        {/* תגית סטטוס */}
-                        <View style={[styles.badge, { backgroundColor: task.isCompleted ? '#dcfce7' : '#fef3c7' }]}>
-                            <Text style={[styles.badgeText, { color: task.isCompleted ? '#166534' : '#b45309' }]}>
-                                {task.isCompleted ? '✓ הושלם' : '📌 בתהליך'}
+                        {/* כותרת וסטטוס */}
+                        <View style={styles.titleRow}>
+                            <Text style={[styles.title, task.isCompleted && styles.titleDone]} numberOfLines={3}>
+                                {task.title}
                             </Text>
-                        </View>
-
-                        {/* תגית תאריך (לחיצה פותחת עריכת זמן) */}
-                        <TouchableOpacity style={styles.dateBadge} onPress={() => onEditDate && onEditDate(task)}>
-                            <Text style={styles.dateBadgeText}>⏰ {formatCompactDate(task.dueDate)} ▾</Text>
-                        </TouchableOpacity>
-                    </View>
-
-                    {/* --- אזור ה-AI והמפה (Geofencing Placeholder) --- */}
-                    {task.locationQuery ? (
-                        <View style={styles.aiSection}>
-                            <Text style={styles.aiTitle}>✨ המלצת ה-AI</Text>
-                            <Text style={styles.aiText}>כדי להשלים משימה זו, מומלץ לבקר ב: <Text style={styles.aiHighlight}>{task.locationQuery}</Text></Text>
-
-                            {/* שומר המקום למפה */}
-                            <View style={styles.mapPlaceholder}>
-                                <Text style={styles.mapText}>[ 🗺️ מפה מקומית עם סיכות תופיע כאן ]</Text>
-                                <Text style={styles.mapSubText}>מחפש '{task.locationQuery}' באזורך...</Text>
+                            <View style={[styles.statusPill, task.isCompleted ? styles.pillDone : styles.pillPending]}>
+                                <Text style={[styles.statusPillText, task.isCompleted ? styles.pillTextDone : styles.pillTextPending]}>
+                                    {task.isCompleted ? 'הושלם ✓' : 'בתהליך'}
+                                </Text>
                             </View>
+                        </View>
 
-                            <TouchableOpacity style={styles.navBtn}>
-                                <Text style={styles.navBtnText}>📍 הצג עסקים קרובים ברשימה</Text>
+                        {/* תאריך — לחיצה פותחת עריכה מלאה */}
+                        {dateInfo ? (
+                            <TouchableOpacity style={styles.dateChip} onPress={() => onEdit(task)} activeOpacity={0.7}>
+                                <Text style={styles.dateChipIcon}>📅</Text>
+                                <View style={{ flex: 1 }}>
+                                    <Text style={styles.dateChipDay}>{dateInfo.day}</Text>
+                                    <Text style={styles.dateChipTime}>{dateInfo.time}</Text>
+                                </View>
+                                <Text style={styles.dateChipEdit}>עריכה ›</Text>
+                            </TouchableOpacity>
+                        ) : (
+                            <TouchableOpacity style={styles.dateChipEmpty} onPress={() => onEdit(task)}>
+                                <Text style={styles.dateChipEmptyText}>+ הוסף תאריך</Text>
+                            </TouchableOpacity>
+                        )}
+
+                        {/* כרטיס המלצת AI — מוצג רק כשיש locationQuery */}
+                        {task.locationQuery ? (
+                            <View style={styles.aiCard}>
+                                <View style={styles.aiCardHeader}>
+                                    <Text style={styles.aiCardIcon}>✨</Text>
+                                    <Text style={styles.aiCardLabel}>המלצת AI</Text>
+                                </View>
+                                <View style={styles.locationRow}>
+                                    <Text style={styles.locationPin}>📍</Text>
+                                    <Text style={styles.locationText}>{task.locationQuery}</Text>
+                                </View>
+
+                                <View style={styles.mapBox}>
+                                    <View style={styles.mapDot} />
+                                    <Text style={styles.mapLabel}>{task.locationQuery}</Text>
+                                </View>
+
+                                <TouchableOpacity style={styles.navBtn} activeOpacity={0.75}>
+                                    <Text style={styles.navBtnText}>🧭  נווט לשם</Text>
+                                </TouchableOpacity>
+                            </View>
+                        ) : null}
+
+                        {/* פעולות */}
+                        <View style={styles.iconRow}>
+                            <TouchableOpacity style={styles.iconTile} onPress={() => onEdit(task)}>
+                                <Text style={styles.iconTileEmoji}>✏️</Text>
+                                <Text style={styles.iconTileLabel}>עריכה</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity style={[styles.iconTile, styles.iconTileDestructive]}
+                                onPress={() => onDelete(task._id || task.id)}>
+                                <Text style={styles.iconTileEmoji}>🗑️</Text>
+                                <Text style={[styles.iconTileLabel, styles.iconTileLabelDestructive]}>מחיקה</Text>
                             </TouchableOpacity>
                         </View>
-                    ) : null}
 
-                    {/* --- פעולת הליבה (CTA) --- */}
-                    <View style={styles.bottomActions}>
+                        {/* כפתור ראשי */}
                         <TouchableOpacity
-                            style={[styles.mainCtaBtn, { backgroundColor: task.isCompleted ? '#f3f4f6' : '#2f855a' }]}
+                            style={[styles.cta, task.isCompleted ? styles.ctaUndo : styles.ctaDo]}
                             onPress={() => onToggle(task)}
+                            activeOpacity={0.8}
                         >
-                            <Text style={[styles.mainCtaText, { color: task.isCompleted ? '#4b5563' : '#fff' }]}>
-                                {task.isCompleted ? '↩️ סמן כלא הושלם (החזר לביצוע)' : '✓ סמן משימה כהושלמה'}
+                            <Text style={[styles.ctaText, task.isCompleted ? styles.ctaTextUndo : styles.ctaTextDo]}>
+                                {task.isCompleted ? '↩  החזר לרשימה' : '✓  סמן כבוצע'}
                             </Text>
                         </TouchableOpacity>
 
-                        <TouchableOpacity style={styles.closeBtn} onPress={onClose}>
-                            <Text style={styles.closeBtnText}>סגור</Text>
-                        </TouchableOpacity>
-                    </View>
-
+                    </ScrollView>
                 </View>
             </View>
         </Modal>
     );
 }
 
+const PURPLE = '#7C3AED';
+const GREEN = '#059669';
+
 const styles = StyleSheet.create({
     overlay: {
         flex: 1,
-        backgroundColor: 'rgba(0,0,0,0.5)', // רקע חצי שקוף
-        justifyContent: 'flex-end', // מצמיד את התוכן לתחתית
+        justifyContent: 'flex-end',
     },
-    backgroundDismiss: {
-        flex: 1, // תופס את כל החלל הריק למעלה כדי לאפשר סגירה בלחיצה בחוץ
+    backdrop: {
+        ...StyleSheet.absoluteFillObject,
+        backgroundColor: 'rgba(0,0,0,0.45)',
     },
-    bottomSheet: {
-        backgroundColor: '#fff',
-        borderTopLeftRadius: 30,
-        borderTopRightRadius: 30,
-        paddingHorizontal: 25,
-        paddingTop: 15,
-        paddingBottom: Platform.OS === 'ios' ? 40 : 25, // ריווח בתחתית בהתאם למכשיר
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: -5 },
-        shadowOpacity: 0.1,
-        shadowRadius: 10,
-        elevation: 20,
+    sheet: {
+        backgroundColor: '#FAFAFA',
+        borderTopLeftRadius: 28,
+        borderTopRightRadius: 28,
+        overflow: 'hidden',
+        maxHeight: '88%',
     },
-    dragHandle: {
-        width: 50,
-        height: 5,
-        backgroundColor: '#e5e7eb',
-        borderRadius: 5,
+    handle: {
+        width: 36,
+        height: 4,
+        backgroundColor: '#D1D5DB',
+        borderRadius: 2,
         alignSelf: 'center',
-        marginBottom: 20,
+        marginTop: 10,
+        marginBottom: 4,
     },
-    headerRow: {
+    statusStrip: {
+        height: 3,
+        marginHorizontal: 20,
+        borderRadius: 2,
+        marginBottom: 8,
+    },
+    stripPending: { backgroundColor: '#FCD34D' },
+    stripDone: { backgroundColor: '#6EE7B7' },
+
+    content: {
+        paddingHorizontal: 20,
+        paddingBottom: Platform.OS === 'ios' ? 40 : 28,
+    },
+
+    titleRow: {
         flexDirection: 'row-reverse',
-        justifyContent: 'space-between',
         alignItems: 'flex-start',
-        marginBottom: 15,
+        justifyContent: 'space-between',
+        gap: 10,
+        marginBottom: 14,
+        marginTop: 4,
     },
     title: {
         flex: 1,
-        fontSize: 26,
-        fontWeight: '900',
-        color: '#1f2937',
-        textAlign: 'right',
-        marginLeft: 15, // רווח מהכפתורים
-    },
-    completedText: {
-        textDecorationLine: 'line-through',
-        color: '#9ca3af',
-    },
-    iconActions: {
-        flexDirection: 'row-reverse',
-        gap: 10,
-    },
-    iconBtn: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        backgroundColor: '#f3f4f6',
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    iconText: {
-        fontSize: 18,
-    },
-    badgesRow: {
-        flexDirection: 'row-reverse',
-        gap: 10,
-        marginBottom: 25,
-    },
-    badge: {
-        paddingVertical: 6,
-        paddingHorizontal: 14,
-        borderRadius: 20,
-    },
-    badgeText: {
-        fontSize: 14,
-        fontWeight: '700',
-    },
-    dateBadge: {
-        backgroundColor: '#f3f4f6',
-        paddingVertical: 6,
-        paddingHorizontal: 14,
-        borderRadius: 20,
-        borderWidth: 1,
-        borderColor: '#e5e7eb',
-    },
-    dateBadgeText: {
-        fontSize: 14,
-        fontWeight: '600',
-        color: '#4b5563',
-    },
-    aiSection: {
-        backgroundColor: '#fdf4ff', // סגול-ורוד בהיר מאוד
-        borderRadius: 20,
-        padding: 20,
-        marginBottom: 25,
-        borderWidth: 1,
-        borderColor: '#f5d0fe',
-    },
-    aiTitle: {
-        fontSize: 16,
+        fontSize: 22,
         fontWeight: '800',
-        color: '#a21caf',
+        color: '#111827',
         textAlign: 'right',
-        marginBottom: 5,
+        lineHeight: 30,
     },
-    aiText: {
-        fontSize: 15,
-        color: '#4b5563',
-        textAlign: 'right',
-        marginBottom: 15,
+    titleDone: {
+        textDecorationLine: 'line-through',
+        color: '#9CA3AF',
     },
-    aiHighlight: {
-        fontWeight: 'bold',
-        color: '#86198f',
+    statusPill: {
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: 20,
+        alignSelf: 'flex-start',
+        marginTop: 4,
     },
-    mapPlaceholder: {
-        height: 120,
-        backgroundColor: '#f3f4f6',
-        borderRadius: 16,
-        justifyContent: 'center',
+    pillPending: { backgroundColor: '#FEF3C7' },
+    pillDone: { backgroundColor: '#D1FAE5' },
+    statusPillText: { fontSize: 12, fontWeight: '700' },
+    pillTextPending: { color: '#92400E' },
+    pillTextDone: { color: '#065F46' },
+
+    dateChip: {
+        flexDirection: 'row-reverse',
         alignItems: 'center',
-        borderWidth: 1,
-        borderColor: '#e5e7eb',
-        borderStyle: 'dashed',
-        marginBottom: 15,
-    },
-    mapText: {
-        fontSize: 15,
-        fontWeight: 'bold',
-        color: '#9ca3af',
-    },
-    mapSubText: {
-        fontSize: 13,
-        color: '#9ca3af',
-        marginTop: 5,
-    },
-    navBtn: {
+        gap: 10,
         backgroundColor: '#fff',
-        paddingVertical: 10,
-        borderRadius: 12,
-        alignItems: 'center',
+        borderRadius: 14,
+        padding: 12,
+        marginBottom: 16,
         borderWidth: 1,
-        borderColor: '#e5e7eb',
+        borderColor: '#E5E7EB',
     },
-    navBtnText: {
-        color: '#4b5563',
-        fontWeight: 'bold',
-        fontSize: 14,
-    },
-    bottomActions: {
-        marginTop: 10,
-    },
-    mainCtaBtn: {
-        paddingVertical: 18,
-        borderRadius: 16,
+    dateChipIcon: { fontSize: 22 },
+    dateChipDay: { fontSize: 14, fontWeight: '700', color: '#1F2937', textAlign: 'right' },
+    dateChipTime: { fontSize: 13, color: '#6B7280', textAlign: 'right' },
+    dateChipEdit: { fontSize: 12, color: '#6B7280' },
+    dateChipEmpty: {
         alignItems: 'center',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.15,
-        shadowRadius: 5,
-        elevation: 4,
+        backgroundColor: '#F9FAFB',
+        borderRadius: 14,
+        padding: 12,
+        marginBottom: 16,
+        borderWidth: 1,
+        borderColor: '#E5E7EB',
+        borderStyle: 'dashed',
+    },
+    dateChipEmptyText: { fontSize: 14, color: '#9CA3AF', fontWeight: '600' },
+
+    aiCard: {
+        backgroundColor: '#F5F3FF',
+        borderRadius: 18,
+        padding: 16,
+        marginBottom: 16,
+        borderWidth: 1,
+        borderColor: '#DDD6FE',
+    },
+    aiCardHeader: {
+        flexDirection: 'row-reverse',
+        alignItems: 'center',
+        gap: 6,
+        marginBottom: 10,
+    },
+    aiCardIcon: { fontSize: 16 },
+    aiCardLabel: {
+        fontSize: 13,
+        fontWeight: '800',
+        color: PURPLE,
+        letterSpacing: 0.5,
+    },
+    locationRow: {
+        flexDirection: 'row-reverse',
+        alignItems: 'center',
+        gap: 8,
         marginBottom: 12,
     },
-    mainCtaText: {
-        fontSize: 18,
-        fontWeight: '900',
+    locationPin: { fontSize: 20 },
+    locationText: {
+        fontSize: 16,
+        fontWeight: '700',
+        color: '#1F2937',
+        textAlign: 'right',
+        flex: 1,
     },
-    closeBtn: {
-        paddingVertical: 15,
+    mapBox: {
+        height: 100,
+        backgroundColor: '#EDE9FE',
+        borderRadius: 12,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: 12,
+        gap: 6,
+    },
+    mapDot: {
+        width: 16,
+        height: 16,
+        borderRadius: 8,
+        backgroundColor: PURPLE,
+        borderWidth: 3,
+        borderColor: '#fff',
+        shadowColor: PURPLE,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.5,
+        shadowRadius: 4,
+        elevation: 4,
+    },
+    mapLabel: { fontSize: 12, color: PURPLE, fontWeight: '600' },
+    navBtn: {
+        backgroundColor: PURPLE,
+        borderRadius: 12,
+        paddingVertical: 11,
         alignItems: 'center',
     },
-    closeBtnText: {
-        color: '#6b7280',
-        fontSize: 16,
-        fontWeight: '600',
+    navBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
+
+    iconRow: {
+        flexDirection: 'row',
+        gap: 10,
+        marginBottom: 16,
     },
+    iconTile: {
+        flex: 1,
+        flexDirection: 'row-reverse',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+        backgroundColor: '#fff',
+        borderRadius: 14,
+        paddingVertical: 13,
+        borderWidth: 1,
+        borderColor: '#E5E7EB',
+    },
+    iconTileDestructive: { borderColor: '#FEE2E2', backgroundColor: '#FFF5F5' },
+    iconTileEmoji: { fontSize: 20 },
+    iconTileLabel: { fontSize: 14, fontWeight: '700', color: '#374151' },
+    iconTileLabelDestructive: { color: '#EF4444' },
+
+    cta: {
+        borderRadius: 16,
+        paddingVertical: 16,
+        alignItems: 'center',
+    },
+    ctaDo: { backgroundColor: GREEN },
+    ctaUndo: { backgroundColor: '#F3F4F6' },
+    ctaText: { fontSize: 16, fontWeight: '800' },
+    ctaTextDo: { color: '#fff' },
+    ctaTextUndo: { color: '#6B7280' },
 });
