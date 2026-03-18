@@ -11,7 +11,8 @@ import {
     KeyboardAvoidingView,
     Platform,
     Modal,
-    Alert
+    Alert,
+    SafeAreaView
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
@@ -40,6 +41,9 @@ export default function App() {
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
 
+    // ניהול טאבים
+    const [activeTab, setActiveTab] = useState('home');
+
     const [newTitle, setNewTitle] = useState('');
     const [dueDate, setDueDate] = useState(new Date());
     const [creating, setCreating] = useState(false);
@@ -57,7 +61,7 @@ export default function App() {
 
     const { location } = useLocationSync(API_BASE, token);
 
-    // --- התראות ---
+    // --- התראות (ללא שינוי) ---
     useEffect(() => {
         Notifications.cancelAllScheduledNotificationsAsync();
         async function setupPushNotifications() {
@@ -106,7 +110,7 @@ export default function App() {
                     title: "תזכורת למשימה! 🔔",
                     body: taskTitle,
                     sound: true,
-                    priority: Notifications.AndroidNotificationPriority.HIGH,
+                    priority: Notifications.AndroidPriority.HIGH,
                 },
                 trigger: {
                     type: Notifications.SchedulableTriggerInputTypes.DATE,
@@ -124,7 +128,6 @@ export default function App() {
         if (notifId) await Notifications.cancelScheduledNotificationAsync(notifId);
     };
 
-    // --- בחירת תאריך למשימה חדשה ---
     const showAndroidPicker = () => {
         DateTimePickerAndroid.open({
             value: dueDate, mode: 'date', display: 'calendar',
@@ -141,7 +144,6 @@ export default function App() {
         });
     };
 
-    // --- משימות ---
     const fetchTasks = useCallback(async () => {
         if (!token) return;
         try {
@@ -155,7 +157,9 @@ export default function App() {
     useEffect(() => {
         (async () => {
             const savedToken = await AsyncStorage.getItem('userToken');
+            const savedUser = await AsyncStorage.getItem('username');
             if (savedToken) setToken(savedToken);
+            if (savedUser) setUsername(savedUser);
             setLoading(false);
         })();
     }, []);
@@ -181,21 +185,17 @@ export default function App() {
     const createTask = async () => {
         const title = newTitle.trim();
         if (!title || !token) return;
-
         if (dueDate <= new Date()) {
             Alert.alert("תאריך לא תקין", "אנא בחר תאריך ושעה בעתיד");
             return;
         }
-
         setCreating(true);
         try {
             let suggestedLocation = '';
             if (isSmartTask) {
                 suggestedLocation = await fetchLocationFromAI(title);
             }
-
             const notifId = await scheduleNotification(title, dueDate);
-
             const res = await fetch(`${API_BASE}/api/tasks/`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Token ${token}` },
@@ -206,9 +206,7 @@ export default function App() {
                     locationQuery: suggestedLocation
                 }),
             });
-
             if (!res.ok) throw new Error("נכשל בשמירת המשימה");
-
             const created = await res.json();
             setTasks(prev => [created, ...prev]);
             setNewTitle('');
@@ -243,6 +241,13 @@ export default function App() {
         });
     };
 
+    const handleLogout = async () => {
+        await AsyncStorage.removeItem('userToken');
+        await AsyncStorage.removeItem('username');
+        setToken(null);
+        setActiveTab('home');
+    };
+
     // --- מסך התחברות ---
     if (!token) {
         return (
@@ -268,6 +273,7 @@ export default function App() {
                                 const data = JSON.parse(textResponse);
                                 if (data.token) {
                                     await AsyncStorage.setItem('userToken', data.token);
+                                    await AsyncStorage.setItem('username', username);
                                     setToken(data.token);
                                 } else {
                                     Alert.alert("שגיאה", "פרטי התחברות שגויים");
@@ -289,17 +295,13 @@ export default function App() {
         );
     }
 
-    // --- מסך ראשי ---
-    return (
-        <View style={styles.container}>
+    // --- תוכן מסך הבית ---
+    const renderHomeScreen = () => (
+        <View style={{ flex: 1 }}>
             <View style={styles.header}>
                 <Text style={styles.brand}>TaskAware</Text>
-                <TouchableOpacity style={styles.logoutBtn} onPress={() => { AsyncStorage.removeItem('userToken'); setToken(null); }}>
-                    <Text style={styles.logoutText}>יציאה</Text>
-                </TouchableOpacity>
             </View>
 
-            {/* הוספת משימה */}
             <View style={styles.inputContainer}>
                 <View style={styles.inputRow}>
                     <TextInput
@@ -328,25 +330,10 @@ export default function App() {
                 </View>
             </View>
 
-            {/* iOS Picker */}
-            {Platform.OS === 'ios' && showIOSPicker && (
-                <Modal transparent animationType="slide">
-                    <View style={styles.modalOverlay}>
-                        <View style={styles.pickerContainer}>
-                            <TouchableOpacity style={{ alignSelf: 'flex-end', padding: 10 }} onPress={() => setShowIOSPicker(false)}>
-                                <Text style={{ color: 'blue', fontWeight: 'bold' }}>סיום</Text>
-                            </TouchableOpacity>
-                            <DateTimePicker value={dueDate} mode="datetime" display="spinner" onChange={(e, d) => d && setDueDate(d)} />
-                        </View>
-                    </View>
-                </Modal>
-            )}
-
-            {/* רשימת משימות */}
             <Text style={styles.listTitle}>המשימות שלי</Text>
             <FlatList
                 data={tasks}
-                contentContainerStyle={{ paddingBottom: 20 }}
+                contentContainerStyle={{ paddingBottom: 100 }}
                 keyExtractor={(item) => (item._id || item.id)?.toString()}
                 ListEmptyComponent={
                     <View style={styles.emptyState}>
@@ -372,8 +359,62 @@ export default function App() {
                 )}
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={fetchTasks} />}
             />
+        </View>
+    );
 
-            {/* מודל פרטי משימה */}
+    // --- תוכן מסך הגדרות (אזור אישי) ---
+    const renderSettingsScreen = () => (
+        <View style={styles.settingsContainer}>
+            <Text style={styles.settingsTitle}>הגדרות ואזור אישי</Text>
+
+            <View style={styles.profileCard}>
+                <View style={styles.avatarCircle}>
+                    <Text style={styles.avatarText}>{username.charAt(0).toUpperCase()}</Text>
+                </View>
+                <Text style={styles.profileName}>שלום, {username}</Text>
+                <Text style={styles.profileSub}>המשתמש שלך מחובר ומסונכרן</Text>
+            </View>
+
+            <View style={styles.settingsList}>
+                <TouchableOpacity style={styles.settingsItem}>
+                    <Text style={styles.settingsItemText}>🔔 ניהול התראות</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.settingsItem}>
+                    <Text style={styles.settingsItemText}>🛡️ פרטיות ואבטחה</Text>
+                </TouchableOpacity>
+            </View>
+
+            <TouchableOpacity style={styles.logoutFullBtn} onPress={handleLogout}>
+                <Text style={styles.logoutFullText}>יציאה מהחשבון</Text>
+            </TouchableOpacity>
+        </View>
+    );
+
+    // --- מסך ראשי משולב ---
+    return (
+        <SafeAreaView style={styles.container}>
+            {activeTab === 'home' ? renderHomeScreen() : renderSettingsScreen()}
+
+            {/* Bottom Tab Bar */}
+            <View style={styles.bottomBar}>
+                <TouchableOpacity
+                    style={styles.tabItem}
+                    onPress={() => setActiveTab('home')}
+                >
+                    <Text style={[styles.tabIcon, activeTab === 'home' && styles.tabIconActive]}>🏠</Text>
+                    <Text style={[styles.tabLabel, activeTab === 'home' && styles.tabLabelActive]}>ראשי</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                    style={styles.tabItem}
+                    onPress={() => setActiveTab('settings')}
+                >
+                    <Text style={[styles.tabIcon, activeTab === 'settings' && styles.tabIconActive]}>👤</Text>
+                    <Text style={[styles.tabLabel, activeTab === 'settings' && styles.tabLabelActive]}>אזור אישי</Text>
+                </TouchableOpacity>
+            </View>
+
+            {/* Modals (Keep them global) */}
             <TaskDetailModal
                 visible={!!selectedTask}
                 task={selectedTask}
@@ -393,13 +434,11 @@ export default function App() {
                 onEdit={(task) => { setEditingTask(task); setSelectedTask(null); }}
             />
 
-            {/* מודל עריכה (שם + תאריך) */}
             <EditTask
                 visible={!!editingTask}
                 task={editingTask}
                 onClose={() => setEditingTask(null)}
                 onSave={async (id, title, newDueDate) => {
-                    // ביטול התראה ישנה ותזמון חדשה אם התאריך השתנה
                     if (newDueDate && editingTask?.notificationId) {
                         await cancelNotification(editingTask.notificationId);
                     }
@@ -412,11 +451,25 @@ export default function App() {
                     setEditingTask(null);
                 }}
             />
-        </View>
+
+            {Platform.OS === 'ios' && showIOSPicker && (
+                <Modal transparent animationType="slide">
+                    <View style={styles.modalOverlay}>
+                        <View style={styles.pickerContainer}>
+                            <TouchableOpacity style={{ alignSelf: 'flex-end', padding: 10 }} onPress={() => setShowIOSPicker(false)}>
+                                <Text style={{ color: 'blue', fontWeight: 'bold' }}>סיום</Text>
+                            </TouchableOpacity>
+                            <DateTimePicker value={dueDate} mode="datetime" display="spinner" onChange={(e, d) => d && setDueDate(d)} />
+                        </View>
+                    </View>
+                </Modal>
+            )}
+        </SafeAreaView>
     );
 }
 
 const styles = StyleSheet.create({
+    // (סגנונות קודמים נשמרים...)
     loginContainer: { flex: 1, justifyContent: 'center', backgroundColor: '#f3f4f6', paddingHorizontal: 20 },
     loginCard: { backgroundColor: '#fff', padding: 25, borderRadius: 24, shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.1, shadowRadius: 15, elevation: 5 },
     loginBrand: { fontSize: 36, fontWeight: '900', textAlign: 'center', marginBottom: 30, color: '#2f855a' },
@@ -425,13 +478,11 @@ const styles = StyleSheet.create({
     loginBtnText: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
     switchModeText: { textAlign: 'center', marginTop: 20, color: '#4b5563', fontSize: 15, fontWeight: '600' },
 
-    container: { flex: 1, paddingTop: 60, paddingHorizontal: 20, backgroundColor: '#f3f4f6' },
-    header: { flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center', marginBottom: 25 },
+    container: { flex: 1, backgroundColor: '#f3f4f6' },
+    header: { flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center', marginBottom: 25, paddingHorizontal: 20, paddingTop: 10 },
     brand: { fontSize: 32, fontWeight: '900', color: '#111827' },
-    logoutBtn: { backgroundColor: '#fee2e2', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20 },
-    logoutText: { color: '#ef4444', fontWeight: 'bold', fontSize: 14 },
 
-    inputContainer: { backgroundColor: '#fff', padding: 20, borderRadius: 24, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 10, elevation: 3, marginBottom: 30 },
+    inputContainer: { backgroundColor: '#fff', padding: 20, borderRadius: 24, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 10, elevation: 3, marginBottom: 30, marginHorizontal: 20 },
     inputRow: { flexDirection: 'row-reverse', gap: 12, marginBottom: 15 },
     taskInput: { flex: 1, height: 55, backgroundColor: '#f9fafb', borderRadius: 16, paddingHorizontal: 15, borderWidth: 1, borderColor: '#e5e7eb', textAlign: 'right', fontSize: 16, color: '#1f2937' },
     datePickerBtn: { width: 55, height: 55, backgroundColor: '#f3f4f6', borderRadius: 16, justifyContent: 'center', alignItems: 'center' },
@@ -444,20 +495,61 @@ const styles = StyleSheet.create({
     addBtn: { backgroundColor: '#2f855a', paddingHorizontal: 20, height: 45, borderRadius: 16, justifyContent: 'center', alignItems: 'center' },
     addBtnText: { color: '#fff', fontSize: 15, fontWeight: 'bold' },
 
-    listTitle: { fontSize: 20, fontWeight: '800', color: '#374151', textAlign: 'right', marginBottom: 15 },
-    taskRow: { flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#fff', padding: 18, borderRadius: 20, marginBottom: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 5, elevation: 2, borderWidth: 1, borderColor: 'transparent' },
-    taskRowCompleted: { backgroundColor: '#f9fafb', borderColor: '#e5e7eb', elevation: 0 },
+    listTitle: { fontSize: 20, fontWeight: '800', color: '#374151', textAlign: 'right', marginBottom: 15, paddingHorizontal: 20 },
+    taskRow: { flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#fff', padding: 18, borderRadius: 20, marginBottom: 12, marginHorizontal: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 5, elevation: 2 },
+    taskRowCompleted: { backgroundColor: '#f9fafb', opacity: 0.7 },
     taskContent: { flex: 1, paddingRight: 15 },
-    taskTitle: { fontSize: 17, fontWeight: '700', color: '#1f2937', textAlign: 'right', marginBottom: 6 },
+    taskTitle: { fontSize: 17, fontWeight: '700', color: '#1f2937', textAlign: 'right' },
     taskTitleCompleted: { textDecorationLine: 'line-through', color: '#9ca3af' },
-    taskDate: { fontSize: 13, color: '#6b7280', textAlign: 'right', marginBottom: 2 },
+    taskDate: { fontSize: 13, color: '#6b7280', textAlign: 'right' },
     taskLocation: { fontSize: 13, color: '#8b5cf6', textAlign: 'right', fontWeight: '600' },
     statusCircle: { width: 28, height: 28, borderRadius: 14, borderWidth: 2, borderColor: '#cbd5e1', justifyContent: 'center', alignItems: 'center' },
     statusCircleCompleted: { backgroundColor: '#2f855a', borderColor: '#2f855a' },
-    checkMark: { color: '#fff', fontSize: 16, fontWeight: '900' },
+    checkMark: { color: '#fff', fontSize: 16 },
 
     emptyState: { alignItems: 'center', marginTop: 40 },
-    emptyStateText: { fontSize: 16, color: '#9ca3af', fontWeight: '600' },
+    emptyStateText: { fontSize: 16, color: '#9ca3af' },
+
+    // סגנונות חדשים ל-Bottom Bar
+    bottomBar: {
+        flexDirection: 'row-reverse',
+        height: 80,
+        backgroundColor: '#fff',
+        borderTopWidth: 1,
+        borderTopColor: '#e5e7eb',
+        paddingBottom: 20,
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        justifyContent: 'space-around',
+        alignItems: 'center',
+        elevation: 20,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: -3 },
+        shadowOpacity: 0.1,
+        shadowRadius: 10
+    },
+    tabItem: { alignItems: 'center', justifyContent: 'center', flex: 1 },
+    tabIcon: { fontSize: 24, opacity: 0.4 },
+    tabIconActive: { opacity: 1 },
+    tabLabel: { fontSize: 12, fontWeight: 'bold', color: '#9ca3af', marginTop: 4 },
+    tabLabelActive: { color: '#2f855a' },
+
+    // סגנונות למסך הגדרות
+    settingsContainer: { flex: 1, padding: 25 },
+    settingsTitle: { fontSize: 28, fontWeight: '900', color: '#111827', textAlign: 'right', marginBottom: 30 },
+    profileCard: { backgroundColor: '#fff', padding: 30, borderRadius: 24, alignItems: 'center', marginBottom: 30, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 10, elevation: 2 },
+    avatarCircle: { width: 80, height: 80, borderRadius: 40, backgroundColor: '#dcfce7', justifyContent: 'center', alignItems: 'center', marginBottom: 15 },
+    avatarText: { fontSize: 32, fontWeight: 'bold', color: '#2f855a' },
+    profileName: { fontSize: 22, fontWeight: 'bold', color: '#1f2937' },
+    profileSub: { fontSize: 14, color: '#6b7280', marginTop: 5 },
+    settingsList: { gap: 15 },
+    settingsItem: { backgroundColor: '#fff', padding: 20, borderRadius: 16, flexDirection: 'row-reverse', alignItems: 'center' },
+    settingsItemText: { fontSize: 16, fontWeight: '600', color: '#374151' },
+    logoutFullBtn: { marginTop: 'auto', marginBottom: 100, backgroundColor: '#fee2e2', padding: 18, borderRadius: 16, alignItems: 'center' },
+    logoutFullText: { color: '#ef4444', fontWeight: 'bold', fontSize: 16 },
+
     modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.4)' },
     pickerContainer: { backgroundColor: 'white', padding: 20, borderTopLeftRadius: 20, borderTopRightRadius: 20 },
 });

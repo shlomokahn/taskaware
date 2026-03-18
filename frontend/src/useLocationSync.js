@@ -1,50 +1,56 @@
-// src/useLocationSync.js
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import * as Location from 'expo-location';
 
 export const useLocationSync = (API_BASE, token) => {
     const [location, setLocation] = useState(null);
+    const [isSyncing, setIsSyncing] = useState(false);
 
-    useEffect(() => {
-        if (!token) return;
+    const syncLocation = async () => {
+        if (!token) return { success: false, error: 'No token' };
 
-        (async () => {
+        setIsSyncing(true);
+        try {
             let { status } = await Location.requestForegroundPermissionsAsync();
             if (status !== 'granted') {
-                console.log('Permission to access location was denied');
-                return;
+                setIsSyncing(false);
+                return { success: false, error: 'Permission denied' };
             }
 
-            let loc = await Location.getCurrentPositionAsync({});
+            let loc = await Location.getCurrentPositionAsync({
+                accuracy: Location.Accuracy.Balanced,
+            });
+
             setLocation(loc);
 
-            try {
-                // שולחים את המיקום לשרת
-                // שים לב: הוספנו / בסוף הכתובת ושינינו ל-PATCH
-                const res = await fetch(`${API_BASE}/api/location/`, {
-                    method: 'PATCH',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Token ${token}` // שינוי לפורמט Django
-                    },
-                    body: JSON.stringify({
-                        latitude: loc.coords.latitude,
-                        longitude: loc.coords.longitude,
-                        address: "Israel, Tel Aviv" // או כל דאטא אחר שאתה שולח
-                    }),
-                });
+            const res = await fetch(`${API_BASE}/api/location/`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Token ${token}`
+                },
+                body: JSON.stringify({
+                    latitude: loc.coords.latitude,
+                    longitude: loc.coords.longitude,
+                    address: "Israel" // כאן אפשר להוסיף המרת קואורדינטות לכתובת אם תרצה בעתיד
+                }),
+            });
 
-                if (!res.ok) {
-                    console.log('⚠️ שרת סירב לעדכון מיקום (' + res.status + ')');
-                } else {
-                    console.log('✅ מיקום סונכרן בהצלחה');
-                }
+            setIsSyncing(false);
 
-            } catch (error) {
-                console.log('Error syncing location:', error);
+            if (res.ok) {
+                console.log('✅ מיקום סונכרן בהצלחה');
+                return { success: true };
+            } else {
+                console.log('⚠️ שרת סירב לעדכון (' + res.status + ')');
+                return { success: false, error: 'Server error' };
             }
-        })();
-    }, [token]); // ירוץ כל פעם שהטוקן משתנה (כלומר כשנכנסים)
 
-    return { location };
+        } catch (error) {
+            console.log('Error syncing location:', error);
+            setIsSyncing(false);
+            return { success: false, error: error.message };
+        }
+    };
+
+    return { location, syncLocation, isSyncing };
 };
