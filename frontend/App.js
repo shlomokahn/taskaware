@@ -52,6 +52,7 @@ export default function App() {
     const [showIOSPicker, setShowIOSPicker] = useState(false);
     const [selectedTask, setSelectedTask] = useState(null);
     const [editingTask, setEditingTask] = useState(null);
+    const [showAddModal, setShowAddModal] = useState(false);
 
     const [token, setToken] = useState(null);
     const [username, setUsername] = useState('');
@@ -68,7 +69,7 @@ export default function App() {
             if (Platform.OS === 'android') {
                 await Notifications.setNotificationChannelAsync('default', {
                     name: 'Task Reminders',
-                    importance: Notifications.AndroidImportance.HIGH,
+                    importance: (Notifications.AndroidImportance && Notifications.AndroidImportance.HIGH) || 4,
                     vibrationPattern: [0, 250, 250, 250],
                     lightColor: '#FF231F7C',
                 });
@@ -105,12 +106,12 @@ export default function App() {
         const triggerDate = new Date(date);
         if (triggerDate <= new Date()) return null;
         try {
-            return await Notifications.scheduleNotificationAsync({
+                return await Notifications.scheduleNotificationAsync({
                 content: {
                     title: "תזכורת למשימה! 🔔",
                     body: taskTitle,
                     sound: true,
-                    priority: Notifications.AndroidPriority.HIGH,
+                    priority: (Notifications.AndroidPriority && Notifications.AndroidPriority.HIGH) || 1,
                 },
                 trigger: {
                     type: Notifications.SchedulableTriggerInputTypes.DATE,
@@ -139,6 +140,32 @@ export default function App() {
                             if (timeEvent.type === 'set' && finalDate) setDueDate(finalDate);
                         },
                     });
+                }
+            },
+        });
+    };
+
+    const openAndroidDate = () => {
+        DateTimePickerAndroid.open({
+            value: dueDate, mode: 'date', display: 'calendar',
+            onChange: (event, selectedDate) => {
+                if (event.type === 'set' && selectedDate) {
+                    const d = new Date(dueDate);
+                    d.setFullYear(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate());
+                    setDueDate(d);
+                }
+            },
+        });
+    };
+
+    const openAndroidTime = () => {
+        DateTimePickerAndroid.open({
+            value: dueDate, mode: 'time', is24Hour: true, display: 'clock',
+            onChange: (event, selectedTime) => {
+                if (event.type === 'set' && selectedTime) {
+                    const d = new Date(dueDate);
+                    d.setHours(selectedTime.getHours(), selectedTime.getMinutes());
+                    setDueDate(d);
                 }
             },
         });
@@ -212,6 +239,7 @@ export default function App() {
             setNewTitle('');
             setDueDate(new Date());
             setIsSmartTask(false);
+            setShowAddModal(false);
         } catch (err) {
             Alert.alert("שגיאה", "שגיאה בשמירת המשימה");
             console.error(err);
@@ -317,34 +345,6 @@ export default function App() {
                 <Text style={styles.brand}>TaskAware</Text>
             </View>
 
-            <View style={styles.inputContainer}>
-                <View style={styles.inputRow}>
-                    <TextInput
-                        style={styles.taskInput}
-                        placeholder="מה המשימה הבאה שלך?"
-                        value={newTitle}
-                        onChangeText={setNewTitle}
-                        placeholderTextColor="#9ca3af"
-                    />
-                    <TouchableOpacity
-                        style={[styles.smartBtn, isSmartTask && styles.smartBtnActive]}
-                        onPress={() => setIsSmartTask(!isSmartTask)}
-                    >
-                        <Text style={[styles.smartBtnText, isSmartTask && styles.smartBtnTextActive]}>✨ AI</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.datePickerBtn} onPress={() => Platform.OS === 'android' ? showAndroidPicker() : setShowIOSPicker(true)}>
-                        <Text style={{ fontSize: 22 }}>📅</Text>
-                    </TouchableOpacity>
-                </View>
-
-                <View style={styles.actionRow}>
-                    <Text style={styles.dateInfo}>מיועד ל: {formatDisplayDate(dueDate)}</Text>
-                    <TouchableOpacity style={styles.addBtn} onPress={createTask} disabled={creating}>
-                        {creating ? <ActivityIndicator color="#fff" /> : <Text style={styles.addBtnText}>הוסף משימה +</Text>}
-                    </TouchableOpacity>
-                </View>
-            </View>
-
             <Text style={styles.listTitle}>המשימות שלי</Text>
             <FlatList
                 data={tasks}
@@ -427,6 +427,10 @@ export default function App() {
                     <Text style={[styles.tabLabel, activeTab === 'home' && styles.tabLabelActive]}>ראשי</Text>
                 </TouchableOpacity>
 
+                <TouchableOpacity style={styles.addFloatingBtn} onPress={() => setShowAddModal(true)}>
+                    <Text style={styles.addFloatingText}>＋</Text>
+                </TouchableOpacity>
+
                 <TouchableOpacity
                     style={styles.tabItem}
                     onPress={() => setActiveTab('settings')}
@@ -486,6 +490,91 @@ export default function App() {
                     </View>
                 </Modal>
             )}
+
+            {/* Add Task Modal (opened from bottom bar) */}
+            <Modal visible={showAddModal} transparent animationType="fade" onRequestClose={() => setShowAddModal(false)}>
+                <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.addModalOverlay}>
+                    <View style={styles.addModalContent}>
+                        <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <Text style={{ fontSize: 18, fontWeight: '800' }}>הוספת משימה</Text>
+                            <TouchableOpacity onPress={() => setShowAddModal(false)}>
+                                <Text style={{ color: 'blue', fontWeight: '700' }}>ביטול</Text>
+                            </TouchableOpacity>
+                        </View>
+
+                        <View style={{ height: 12 }} />
+
+                        <TextInput
+                            style={[styles.taskInput, styles.taskInputModal]}
+                            placeholder="מה המשימה הבאה שלך?"
+                            value={newTitle}
+                            onChangeText={setNewTitle}
+                            placeholderTextColor="#9ca3af"
+                            autoFocus={true}
+                            editable={true}
+                            returnKeyType="done"
+                            multiline={false}
+                        />
+
+                        <View style={{ height: 8 }} />
+
+                        <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, gap: 8 }}>
+                            <TouchableOpacity
+                                style={[styles.modalHalfBtn, isSmartTask && styles.smartBtnActive]}
+                                onPress={() => setIsSmartTask(!isSmartTask)}
+                            >
+                                <Text style={[styles.modalHalfBtnText, isSmartTask && styles.smartBtnTextActive]}>✨ AI</Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity style={[styles.modalHalfBtn, styles.modalHalfBtnPrimary]} onPress={createTask} disabled={creating}>
+                                {creating ? <ActivityIndicator color="#fff" /> : <Text style={styles.modalHalfBtnTextPrimary}>הוסף משימה</Text>}
+                            </TouchableOpacity>
+                        </View>
+
+                        <View style={styles.pickersArea}>
+                            {Platform.OS === 'ios' ? (
+                                <>
+                                    <View style={styles.inlinePickerWrapper}>
+                                        <DateTimePicker
+                                            value={dueDate}
+                                            mode="date"
+                                            display="compact"
+                                            onChange={(e, d) => d && setDueDate(new Date(d.getFullYear(), d.getMonth(), d.getDate(), dueDate.getHours(), dueDate.getMinutes()))}
+                                            style={styles.datePickerInline}
+                                        />
+                                    </View>
+
+                                    <View style={styles.inlinePickerWrapper}>
+                                        <DateTimePicker
+                                            value={dueDate}
+                                            mode="time"
+                                            display="spinner"
+                                            is24Hour={true}
+                                            onChange={(e, d) => d && setDueDate(new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate(), d.getHours(), d.getMinutes()))}
+                                            style={styles.timePickerInline}
+                                        />
+                                    </View>
+                                </>
+                            ) : (
+                                <View style={styles.androidPickerContainer}>
+                                    <TouchableOpacity style={styles.calendarPreview} onPress={openAndroidDate}>
+                                        <Text style={styles.pickerLabel}>🗓️ בחר תאריך</Text>
+                                        <Text style={styles.pickerValue}>{formatDisplayDate(dueDate).split(' ')[0]}</Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity style={styles.timePreview} onPress={openAndroidTime}>
+                                        <Text style={styles.pickerLabel}>⏰ בחר שעה</Text>
+                                        <Text style={styles.pickerValue}>{formatDisplayDate(dueDate).split(' ')[1] || formatDisplayDate(dueDate)}</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            )}
+
+                            <View style={{ height: 18 }} />
+
+                            {/* old add button removed; add action now in AI row */}
+                        </View>
+                    </View>
+                </KeyboardAvoidingView>
+            </Modal>
         </SafeAreaView>
     );
 }
@@ -574,4 +663,22 @@ const styles = StyleSheet.create({
 
     modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.4)' },
     pickerContainer: { backgroundColor: 'white', padding: 20, borderTopLeftRadius: 20, borderTopRightRadius: 20 },
+    addFloatingBtn: { width: 64, height: 64, borderRadius: 32, backgroundColor: '#2f855a', justifyContent: 'center', alignItems: 'center', marginTop: -28, elevation: 6, shadowColor: '#000', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.15, shadowRadius: 6 },
+    addFloatingText: { color: '#fff', fontSize: 30, lineHeight: 30, fontWeight: '900' },
+    addModalOverlay: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.4)' },
+    addModalContent: { backgroundColor: '#fff', padding: 20, borderRadius: 12, width: '92%', height: '70%', justifyContent: 'flex-start', overflow: 'hidden' },
+    inlinePickerWrapper: { overflow: 'hidden', borderRadius: 12, backgroundColor: '#fff', marginBottom: 8 },
+    pickersArea: { flex: 1, marginTop: 12 },
+    datePickerInline: { width: '100%', backgroundColor: '#fff' },
+    timePickerInline: { width: '100%', backgroundColor: '#fff' },
+    androidPickerContainer: { flex: 1, justifyContent: 'center', gap: 12 },
+    calendarPreview: { flex: 1, backgroundColor: '#f9fafb', borderRadius: 12, padding: 16, justifyContent: 'center', alignItems: 'center', marginBottom: 10 },
+    timePreview: { height: 80, backgroundColor: '#f3f4f6', borderRadius: 12, padding: 16, justifyContent: 'center', alignItems: 'center' },
+    pickerLabel: { fontSize: 14, color: '#6b7280', fontWeight: '600' },
+    pickerValue: { fontSize: 18, fontWeight: '800', color: '#111827', marginTop: 6 },
+    taskInputModal: { flex: 0, height: 40, maxHeight: 40, minHeight: 40, paddingHorizontal: 12, paddingVertical: 8, fontSize: 16, textAlignVertical: 'center' },
+    modalHalfBtn: { flex: 1, height: 44, borderRadius: 12, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f3f4f6' },
+    modalHalfBtnPrimary: { backgroundColor: '#2f855a' },
+    modalHalfBtnText: { fontSize: 15, fontWeight: '700', color: '#374151' },
+    modalHalfBtnTextPrimary: { fontSize: 15, fontWeight: '700', color: '#fff' },
 });
