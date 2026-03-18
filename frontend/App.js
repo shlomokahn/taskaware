@@ -59,7 +59,7 @@ export default function App() {
     const [isLoginMode, setIsLoginMode] = useState(true);
     const [isAuthLoading, setIsAuthLoading] = useState(false);
 
-    const { location } = useLocationSync(API_BASE, token);
+    const { location, syncLocation, isSyncing } = useLocationSync(API_BASE, token);
 
     // --- התראות (ללא שינוי) ---
     useEffect(() => {
@@ -248,6 +248,21 @@ export default function App() {
         setActiveTab('home');
     };
 
+    const handleLocationSync = async () => {
+        const result = await syncLocation();
+        if (result.success) {
+            Alert.alert('הצלחה', 'המיקום סונכרן בהצלחה');
+            return;
+        }
+
+        if (result.error === 'Permission denied') {
+            Alert.alert('הרשאת מיקום נדרשת', 'כדי לסנכרן מיקום יש לאשר גישה למיקום במכשיר');
+            return;
+        }
+
+        Alert.alert('שגיאה', 'סנכרון המיקום נכשל, נסה שוב');
+    };
+
     // --- מסך התחברות ---
     if (!token) {
         return (
@@ -381,6 +396,13 @@ export default function App() {
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.settingsItem}>
                     <Text style={styles.settingsItemText}>🛡️ פרטיות ואבטחה</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                    style={styles.settingsItem}
+                    onPress={handleLocationSync}
+                    disabled={isSyncing}
+                >
+                    <Text style={styles.settingsItemText}>{isSyncing ? '⏳ מסנכרן מיקום...' : '📍 סנכרון מיקום'}</Text>
                 </TouchableOpacity>
             </View>
 
