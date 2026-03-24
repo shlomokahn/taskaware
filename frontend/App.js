@@ -220,7 +220,22 @@ export default function App() {
         try {
             let suggestedLocation = '';
             if (isSmartTask) {
-                suggestedLocation = await fetchLocationFromAI(title);
+                // Wait for AI response but guard with a timeout (8s) so UI doesn't hang forever
+                const AI_TIMEOUT_MS = 8000;
+                try {
+                    const aiPromise = fetchLocationFromAI(title);
+                    const result = await Promise.race([
+                        aiPromise,
+                        new Promise((resolve) => setTimeout(() => resolve(null), AI_TIMEOUT_MS))
+                    ]);
+                    if (result) {
+                        suggestedLocation = result;
+                    } else {
+                        console.warn('AI did not respond in time or returned no suggestion. Proceeding without suggestion.');
+                    }
+                } catch (e) {
+                    console.error('Error while waiting for AI:', e);
+                }
             }
             const notifId = await scheduleNotification(title, dueDate);
             const res = await fetch(`${API_BASE}/api/tasks/`, {
