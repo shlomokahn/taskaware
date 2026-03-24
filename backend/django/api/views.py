@@ -105,29 +105,35 @@ class TaskViewSet(viewsets.ModelViewSet):
 @permission_classes([IsAuthenticated])
 def ask_ai(request):
     title = request.data.get('title')
-    taskId = request.data.get('taskId')
+    task_id = request.data.get('taskId') # מומלץ להשתמש ב-snake_case במשתנים
     
-    if not title:
-        return Response({"error": "חסר שם משימה"}, status=400)
+    # 1. בדיקת תקינות בסיסית
+    if not title or not task_id:
+        return Response({"error": "חסר שם משימה או מזהה משימה"}, status=400)
 
     try:
-        # אתחול הקליינט החדש של גוגל
+        # 2. פנייה ל-AI
         client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
         
         prompt = f"""אתה עוזר חכם לאפליקציית ניהול משימות. המשתמש ייתן לך תיאור של משימה, ועליך להחזיר *אך ורק* את סוג המקום (באנגלית או בעברית) שבו ניתן לבצע אותה. אל תוסיף שום הסבר.
         דוגמה: עבור 'לקנות חלב' תחזיר 'סופרמרקט'.
         המשימה: '{title}'"""
 
-        # קריאה למודל בסינטקס החדש
         response = client.models.generate_content(
             model='gemini-2.5-flash',
             contents=prompt,
         )
         
-        # ניקוי התשובה
         location_query = response.text.strip().replace('.', '')
 
-        # --- הוספת שליחת פוש כשה-AI מסיים לנתח ---
+        # 3. עדכון הדאטה-בייס (נפריד את זה מהפוש כדי להבטיח שמירה)
+        updated_count = Task.objects.filter(id=task_id).update(locationQuery=location_query)
+        Task.save()
+        
+        if updated_count == 0:
+            print(f"Warning: No task found with id {task_id}")
+
+        # 4. ניסיון שליחת פוש (בבלוק נפרד כדי שלא יפיל את התהליך)
         try:
             profile = UserProfile.objects.get(user=request.user)
             if profile.expo_push_token:
@@ -136,13 +142,12 @@ def ask_ai(request):
                     title="ה-AI מצא מיקום! 📍",
                     body=f"עבור המשימה '{title}', חפש באזור: {location_query}"
                 )
-            Task.objects.filter(id=taskId).update(locationQuery=location_query)    
-        except Exception as e:
-            print("Push error in AI:", str(e))
+        except Exception as push_e:
+            print("Push notification failed, but data was saved:", str(push_e))
 
-        print(f"AI Answered: {location_query}")
+        print(f"AI Answered and saved: {location_query}")
         return Response({"locationQuery": location_query})
 
     except Exception as e:
-        print("Gemini API Error details:", str(e))
-        return Response({"error": "שגיאה בפנייה למודל ה-AI"}, status=500)
+        print("General Error in ask_ai:", str(e))
+        return Response({"error": "שגיאה בתהליך עיבוד המשימה"}, status=500)
