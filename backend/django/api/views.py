@@ -105,6 +105,7 @@ class TaskViewSet(viewsets.ModelViewSet):
 @permission_classes([IsAuthenticated])
 def ask_ai(request):
     title = request.data.get('title')
+    taskId = request.data.get('taskId')
     
     if not title:
         return Response({"error": "חסר שם משימה"}, status=400)
@@ -135,6 +136,7 @@ def ask_ai(request):
                     title="ה-AI מצא מיקום! 📍",
                     body=f"עבור המשימה '{title}', חפש באזור: {location_query}"
                 )
+            Task.objects.filter(id=taskId).update(locationQuery=location_query)    
         except Exception as e:
             print("Push error in AI:", str(e))
 

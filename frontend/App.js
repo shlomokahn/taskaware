@@ -41,7 +41,6 @@ export default function App() {
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
 
-    // ניהול טאבים
     const [activeTab, setActiveTab] = useState('home');
 
     const [newTitle, setNewTitle] = useState('');
@@ -62,7 +61,7 @@ export default function App() {
 
     const { location, syncLocation, isSyncing } = useLocationSync(API_BASE, token);
 
-    // --- התראות (ללא שינוי) ---
+    // --- התראות ---
     useEffect(() => {
         Notifications.cancelAllScheduledNotificationsAsync();
         async function setupPushNotifications() {
@@ -106,7 +105,7 @@ export default function App() {
         const triggerDate = new Date(date);
         if (triggerDate <= new Date()) return null;
         try {
-                return await Notifications.scheduleNotificationAsync({
+            return await Notifications.scheduleNotificationAsync({
                 content: {
                     title: "תזכורת למשימה! 🔔",
                     body: taskTitle,
@@ -127,22 +126,6 @@ export default function App() {
 
     const cancelNotification = async (notifId) => {
         if (notifId) await Notifications.cancelScheduledNotificationAsync(notifId);
-    };
-
-    const showAndroidPicker = () => {
-        DateTimePickerAndroid.open({
-            value: dueDate, mode: 'date', display: 'calendar',
-            onChange: (event, selectedDate) => {
-                if (event.type === 'set' && selectedDate) {
-                    DateTimePickerAndroid.open({
-                        value: selectedDate, mode: 'time', is24Hour: true, display: 'clock',
-                        onChange: (timeEvent, finalDate) => {
-                            if (timeEvent.type === 'set' && finalDate) setDueDate(finalDate);
-                        },
-                    });
-                }
-            },
-        });
     };
 
     const openAndroidDate = () => {
@@ -193,12 +176,15 @@ export default function App() {
 
     useEffect(() => { if (token) fetchTasks(); }, [token, fetchTasks]);
 
-    const fetchLocationFromAI = async (taskTitle) => {
+    const fetchLocationFromAI = async (taskId, taskTitle) => {
         try {
             const res = await fetch(`${API_BASE}/api/ask-ai/`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Token ${token}` },
-                body: JSON.stringify({ title: taskTitle }),
+                body: JSON.stringify({ 
+                    title: taskTitle, 
+                    taskId: taskId.id,
+                }),
             });
             if (!res.ok) return null;
             const data = await res.json();
@@ -216,27 +202,10 @@ export default function App() {
             Alert.alert("תאריך לא תקין", "אנא בחר תאריך ושעה בעתיד");
             return;
         }
+
         setCreating(true);
         try {
-            let suggestedLocation = '';
-            if (isSmartTask) {
-                // Wait for AI response but guard with a timeout (8s) so UI doesn't hang forever
-                const AI_TIMEOUT_MS = 8000;
-                try {
-                    const aiPromise = fetchLocationFromAI(title);
-                    const result = await Promise.race([
-                        aiPromise,
-                        new Promise((resolve) => setTimeout(() => resolve(null), AI_TIMEOUT_MS))
-                    ]);
-                    if (result) {
-                        suggestedLocation = result;
-                    } else {
-                        console.warn('AI did not respond in time or returned no suggestion. Proceeding without suggestion.');
-                    }
-                } catch (e) {
-                    console.error('Error while waiting for AI:', e);
-                }
-            }
+            // שלב 1: שמור את המשימה מיידית ללא המתנה ל-AI
             const notifId = await scheduleNotification(title, dueDate);
             const res = await fetch(`${API_BASE}/api/tasks/`, {
                 method: 'POST',
@@ -245,21 +214,35 @@ export default function App() {
                     title,
                     dueDate: dueDate.toISOString(),
                     notificationId: notifId,
-                    locationQuery: suggestedLocation
                 }),
             });
             if (!res.ok) throw new Error("נכשל בשמירת המשימה");
             const created = await res.json();
+
+            // עדכון מיידי של הרשימה — המשימה מופיעה מיד
             setTasks(prev => [created, ...prev]);
-            setNewTitle('');
-            setDueDate(new Date());
-            setIsSmartTask(false);
             setShowAddModal(false);
+
+            // שלב 2: AI ברקע — כשחוזר, מעדכן את המשימה בשרת ובתצוגה
+            if (isSmartTask) {
+                const taskId = created._id || created.id;
+                fetchLocationFromAI(taskId, title)
+                    .then(async (locationQuery) => {
+                        if (!locationQuery) return;
+                        // PATCH לשרת + עדכון setTasks אוטומטי בתוך handleUpdateTask
+                        await handleUpdateTask(taskId, { locationQuery });
+                    })
+                    .catch(err => console.error('AI location update failed:', err));
+            }
+
         } catch (err) {
             Alert.alert("שגיאה", "שגיאה בשמירת המשימה");
             console.error(err);
         } finally {
             setCreating(false);
+            setNewTitle('');
+            setDueDate(new Date());
+            setIsSmartTask(false);
         }
     };
 
@@ -271,6 +254,7 @@ export default function App() {
                 body: JSON.stringify(fields),
             });
             const updated = await res.json();
+            // עדכון התצוגה אוטומטית ברגע שהשרת מחזיר את הנתון המעודכן
             setTasks(prev => prev.map(t => (t._id || t.id) === taskId ? updated : t));
             return updated;
         } catch (err) { console.error(err); }
@@ -297,12 +281,10 @@ export default function App() {
             Alert.alert('הצלחה', 'המיקום סונכרן בהצלחה');
             return;
         }
-
         if (result.error === 'Permission denied') {
             Alert.alert('הרשאת מיקום נדרשת', 'כדי לסנכרן מיקום יש לאשר גישה למיקום במכשיר');
             return;
         }
-
         Alert.alert('שגיאה', 'סנכרון המיקום נכשל, נסה שוב');
     };
 
@@ -378,9 +360,11 @@ export default function App() {
                         <View style={styles.taskContent}>
                             <Text style={[styles.taskTitle, item.isCompleted && styles.taskTitleCompleted]}>{item.title}</Text>
                             <Text style={styles.taskDate}>⏰ {formatDisplayDate(item.dueDate)}</Text>
-                            {item.locationQuery && (
+                            {item.locationQuery ? (
                                 <Text style={styles.taskLocation}>📍 מומלץ לבצע ב: {item.locationQuery}</Text>
-                            )}
+                            ) : item.isSmartTask ? (
+                                <Text style={styles.taskLocationPending}>✨ ממתין להמלצת מיקום...</Text>
+                            ) : null}
                         </View>
                         <View style={[styles.statusCircle, item.isCompleted && styles.statusCircleCompleted]}>
                             {item.isCompleted && <Text style={styles.checkMark}>✓</Text>}
@@ -392,7 +376,7 @@ export default function App() {
         </View>
     );
 
-    // --- תוכן מסך הגדרות (אזור אישי) ---
+    // --- תוכן מסך הגדרות ---
     const renderSettingsScreen = () => (
         <View style={styles.settingsContainer}>
             <Text style={styles.settingsTitle}>הגדרות ואזור אישי</Text>
@@ -427,17 +411,14 @@ export default function App() {
         </View>
     );
 
-    // --- מסך ראשי משולב ---
+    // --- מסך ראשי ---
     return (
         <SafeAreaView style={styles.container}>
             {activeTab === 'home' ? renderHomeScreen() : renderSettingsScreen()}
 
             {/* Bottom Tab Bar */}
             <View style={styles.bottomBar}>
-                <TouchableOpacity
-                    style={styles.tabItem}
-                    onPress={() => setActiveTab('home')}
-                >
+                <TouchableOpacity style={styles.tabItem} onPress={() => setActiveTab('home')}>
                     <Text style={[styles.tabIcon, activeTab === 'home' && styles.tabIconActive]}>🏠</Text>
                     <Text style={[styles.tabLabel, activeTab === 'home' && styles.tabLabelActive]}>ראשי</Text>
                 </TouchableOpacity>
@@ -446,16 +427,13 @@ export default function App() {
                     <Text style={styles.addFloatingText}>＋</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity
-                    style={styles.tabItem}
-                    onPress={() => setActiveTab('settings')}
-                >
+                <TouchableOpacity style={styles.tabItem} onPress={() => setActiveTab('settings')}>
                     <Text style={[styles.tabIcon, activeTab === 'settings' && styles.tabIconActive]}>👤</Text>
                     <Text style={[styles.tabLabel, activeTab === 'settings' && styles.tabLabelActive]}>אזור אישי</Text>
                 </TouchableOpacity>
             </View>
 
-            {/* Modals (Keep them global) */}
+            {/* Modals */}
             <TaskDetailModal
                 visible={!!selectedTask}
                 task={selectedTask}
@@ -506,7 +484,7 @@ export default function App() {
                 </Modal>
             )}
 
-            {/* Add Task Modal (opened from bottom bar) */}
+            {/* Add Task Modal */}
             <Modal visible={showAddModal} transparent animationType="fade" onRequestClose={() => setShowAddModal(false)}>
                 <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.addModalOverlay}>
                     <View style={styles.addModalContent}>
@@ -558,7 +536,6 @@ export default function App() {
                                             style={styles.datePickerInline}
                                         />
                                     </View>
-
                                     <View style={styles.inlinePickerWrapper}>
                                         <DateTimePicker
                                             value={dueDate}
@@ -582,10 +559,7 @@ export default function App() {
                                     </TouchableOpacity>
                                 </View>
                             )}
-
                             <View style={{ height: 18 }} />
-
-                            {/* old add button removed; add action now in AI row */}
                         </View>
                     </View>
                 </KeyboardAvoidingView>
@@ -595,7 +569,6 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
-    // (סגנונות קודמים נשמרים...)
     loginContainer: { flex: 1, justifyContent: 'center', backgroundColor: '#f3f4f6', paddingHorizontal: 20 },
     loginCard: { backgroundColor: '#fff', padding: 25, borderRadius: 24, shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.1, shadowRadius: 15, elevation: 5 },
     loginBrand: { fontSize: 36, fontWeight: '900', textAlign: 'center', marginBottom: 30, color: '#2f855a' },
@@ -629,6 +602,7 @@ const styles = StyleSheet.create({
     taskTitleCompleted: { textDecorationLine: 'line-through', color: '#9ca3af' },
     taskDate: { fontSize: 13, color: '#6b7280', textAlign: 'right' },
     taskLocation: { fontSize: 13, color: '#8b5cf6', textAlign: 'right', fontWeight: '600' },
+    taskLocationPending: { fontSize: 13, color: '#d946ef', textAlign: 'right', fontWeight: '500' },
     statusCircle: { width: 28, height: 28, borderRadius: 14, borderWidth: 2, borderColor: '#cbd5e1', justifyContent: 'center', alignItems: 'center' },
     statusCircleCompleted: { backgroundColor: '#2f855a', borderColor: '#2f855a' },
     checkMark: { color: '#fff', fontSize: 16 },
@@ -636,7 +610,6 @@ const styles = StyleSheet.create({
     emptyState: { alignItems: 'center', marginTop: 40 },
     emptyStateText: { fontSize: 16, color: '#9ca3af' },
 
-    // סגנונות חדשים ל-Bottom Bar
     bottomBar: {
         flexDirection: 'row-reverse',
         height: 80,
@@ -662,7 +635,6 @@ const styles = StyleSheet.create({
     tabLabel: { fontSize: 12, fontWeight: 'bold', color: '#9ca3af', marginTop: 4 },
     tabLabelActive: { color: '#2f855a' },
 
-    // סגנונות למסך הגדרות
     settingsContainer: { flex: 1, padding: 25 },
     settingsTitle: { fontSize: 28, fontWeight: '900', color: '#111827', textAlign: 'right', marginBottom: 30 },
     profileCard: { backgroundColor: '#fff', padding: 30, borderRadius: 24, alignItems: 'center', marginBottom: 30, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 10, elevation: 2 },
