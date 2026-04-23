@@ -25,6 +25,11 @@ import DateTimePicker, { DateTimePickerAndroid } from '@react-native-community/d
 import * as Device from 'expo-device';
 import Constants from 'expo-constants';
 
+import LoginScreen from './src/screens/LoginScreen';
+import SettingsScreen from './src/screens/SettingsScreen';
+import HomeScreen from './src/screens/HomeScreen';
+
+
 Notifications.setNotificationHandler({
     handleNotification: async () => ({
         shouldShowBanner: true,
@@ -291,120 +296,31 @@ export default function App() {
 
     if (!token) {
         return (
-            <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.loginContainer}>
-                <View style={styles.loginCard}>
-                    <Text style={styles.loginBrand}>TaskAware</Text>
-                    <TextInput style={styles.loginInput} placeholder="שם משתמש" value={username} onChangeText={setUsername} autoCapitalize="none" />
-                    <TextInput style={styles.loginInput} placeholder="סיסמה" secureTextEntry value={password} onChangeText={setPassword} />
-                    <TouchableOpacity
-                        style={styles.loginBtn} disabled={isAuthLoading}
-                        onPress={async () => {
-                            if (!username || !password) { Alert.alert("שגיאה", "אנא הזן שם משתמש וסיסמה"); return; }
-                            setIsAuthLoading(true);
-                            const path = isLoginMode ? '/api/login/' : '/api/signup/';
-                            try {
-                                const res = await fetch(`${API_BASE}${path}`, {
-                                    method: 'POST',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({ username, password }),
-                                });
-                                const textResponse = await res.text();
-                                if (!res.ok) { Alert.alert("שגיאה מהשרת", "הבקשה נכשלה"); return; }
-                                const data = JSON.parse(textResponse);
-                                if (data.token) {
-                                    await AsyncStorage.setItem('userToken', data.token);
-                                    await AsyncStorage.setItem('username', username);
-                                    setToken(data.token);
-                                } else {
-                                    Alert.alert("שגיאה", "פרטי התחברות שגויים");
-                                }
-                            } catch (e) {
-                                Alert.alert("שגיאת רשת", "חיבור לשרת נכשל");
-                            } finally {
-                                setIsAuthLoading(false);
-                            }
-                        }}
-                    >
-                        {isAuthLoading ? <ActivityIndicator color="#fff" /> : <Text style={styles.loginBtnText}>{isLoginMode ? 'כניסה' : 'הרשמה'}</Text>}
-                    </TouchableOpacity>
-                    <TouchableOpacity onPress={() => setIsLoginMode(!isLoginMode)}>
-                        <Text style={styles.switchModeText}>{isLoginMode ? 'אין לך חשבון? עבור להרשמה' : 'יש לך חשבון? עבור להתחברות'}</Text>
-                    </TouchableOpacity>
-                </View>
-            </KeyboardAvoidingView>
+            <LoginScreen
+                API_BASE={API_BASE}
+                setToken={setToken}
+                setUsername={setUsername}
+            />
         );
     }
 
     const renderHomeScreen = () => (
-        <View style={{ flex: 1 }}>
-            <View style={styles.header}>
-                <Text style={styles.brand}>TaskAware</Text>
-            </View>
-
-            <Text style={styles.listTitle}>המשימות שלי</Text>
-            <FlatList
-                data={tasks}
-                contentContainerStyle={{ paddingBottom: 100 }}
-                keyExtractor={(item) => (item._id || item.id)?.toString()}
-                ListEmptyComponent={
-                    <View style={styles.emptyState}>
-                        <Text style={styles.emptyStateText}>אין לך משימות כרגע. איזה כיף! 🎉</Text>
-                    </View>
-                }
-                renderItem={({ item }) => (
-                    <TouchableOpacity
-                        style={[styles.taskRow, item.isCompleted && styles.taskRowCompleted]}
-                        onPress={() => setSelectedTask(item)}
-                    >
-                        <View style={styles.taskContent}>
-                            <Text style={[styles.taskTitle, item.isCompleted && styles.taskTitleCompleted]}>{item.title}</Text>
-                            <Text style={styles.taskDate}>⏰ {formatDisplayDate(item.dueDate)}</Text>
-                            {item.locationQuery && (
-                                <Text style={styles.taskLocation}>📍 מומלץ לבצע ב: {item.locationQuery}</Text>
-                            )}
-                        </View>
-                        <View style={[styles.statusCircle, item.isCompleted && styles.statusCircleCompleted]}>
-                            {item.isCompleted && <Text style={styles.checkMark}>✓</Text>}
-                        </View>
-                    </TouchableOpacity>
-                )}
-                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={fetchTasks} />}
-            />
-        </View>
+        <HomeScreen
+            tasks={tasks}
+            refreshing={refreshing}
+            fetchTasks={fetchTasks}
+            setSelectedTask={setSelectedTask}
+            formatDisplayDate={formatDisplayDate}
+        />
     );
 
-    const renderSettingsScreen = () => (
-        <View style={styles.settingsContainer}>
-            <Text style={styles.settingsTitle}>הגדרות ואזור אישי</Text>
-
-            <View style={styles.profileCard}>
-                <View style={styles.avatarCircle}>
-                    <Text style={styles.avatarText}>{username.charAt(0).toUpperCase()}</Text>
-                </View>
-                <Text style={styles.profileName}>שלום, {username}</Text>
-                <Text style={styles.profileSub}>המשתמש שלך מחובר ומסונכרן</Text>
-            </View>
-
-            <View style={styles.settingsList}>
-                <TouchableOpacity style={styles.settingsItem}>
-                    <Text style={styles.settingsItemText}>🔔 ניהול התראות</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.settingsItem}>
-                    <Text style={styles.settingsItemText}>🛡️ פרטיות ואבטחה</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                    style={styles.settingsItem}
-                    onPress={handleLocationSync}
-                    disabled={isSyncing}
-                >
-                    <Text style={styles.settingsItemText}>{isSyncing ? '⏳ מסנכרן מיקום...' : '📍 סנכרון מיקום'}</Text>
-                </TouchableOpacity>
-            </View>
-
-            <TouchableOpacity style={styles.logoutFullBtn} onPress={handleLogout}>
-                <Text style={styles.logoutFullText}>יציאה מהחשבון</Text>
-            </TouchableOpacity>
-        </View>
+     const renderSettingsScreen = () => (
+        <SettingsScreen
+            username={username}
+            handleLogout={handleLogout}
+            handleLocationSync={handleLocationSync}
+            isSyncing={isSyncing}
+        />
     );
 
     return (
