@@ -33,7 +33,7 @@ export default function TaskDetailModal({ visible, task, onClose, onToggle, onDe
                             </Text>
                             <View style={[styles.statusPill, task.isCompleted ? styles.pillDone : styles.pillPending]}>
                                 <Text style={[styles.statusPillText, task.isCompleted ? styles.pillTextDone : styles.pillTextPending]}>
-                                    {task.isCompleted ? 'הושלם ✓' : 'בתהליך'}
+                                    {task.isCompleted ? 'Completed ✓' : 'in process'}
                                 </Text>
                             </View>
                         </View>
@@ -46,11 +46,11 @@ export default function TaskDetailModal({ visible, task, onClose, onToggle, onDe
                                     <Text style={styles.dateChipDay}>{dateInfo.day}</Text>
                                     <Text style={styles.dateChipTime}>{dateInfo.time}</Text>
                                 </View>
-                                <Text style={styles.dateChipEdit}>עריכה ›</Text>
+                                <Text style={styles.dateChipEdit}>edit ›</Text>
                             </TouchableOpacity>
                         ) : (
                             <TouchableOpacity style={styles.dateChipEmpty} onPress={() => onEdit(task)}>
-                                <Text style={styles.dateChipEmptyText}>+ הוסף תאריך</Text>
+                                    <Text style={styles.dateChipEmptyText}>+ Add a date</Text>
                             </TouchableOpacity>
                         )}
 
@@ -59,7 +59,7 @@ export default function TaskDetailModal({ visible, task, onClose, onToggle, onDe
                             <View style={styles.aiCard}>
                                 <View style={styles.aiCardHeader}>
                                     <Text style={styles.aiCardIcon}>✨</Text>
-                                    <Text style={styles.aiCardLabel}>המלצת AI</Text>
+                                    <Text style={styles.aiCardLabel}>AI recommendation</Text>
                                 </View>
                                 <View style={styles.locationRow}>
                                     <Text style={styles.locationPin}>📍</Text>
@@ -72,7 +72,7 @@ export default function TaskDetailModal({ visible, task, onClose, onToggle, onDe
                                 </View>
 
                                 <TouchableOpacity style={styles.navBtn} activeOpacity={0.75}>
-                                    <Text style={styles.navBtnText}>🧭  נווט לשם</Text>
+                                    <Text style={styles.navBtnText}>🧭  Navigate there</Text>
                                 </TouchableOpacity>
                             </View>
                         ) : null}
@@ -81,12 +81,12 @@ export default function TaskDetailModal({ visible, task, onClose, onToggle, onDe
                         <View style={styles.iconRow}>
                             <TouchableOpacity style={styles.iconTile} onPress={() => onEdit(task)}>
                                 <Text style={styles.iconTileEmoji}>✏️</Text>
-                                <Text style={styles.iconTileLabel}>עריכה</Text>
+                                <Text style={styles.iconTileLabel}>edit</Text>
                             </TouchableOpacity>
                             <TouchableOpacity style={[styles.iconTile, styles.iconTileDestructive]}
                                 onPress={() => onDelete(task._id || task.id)}>
                                 <Text style={styles.iconTileEmoji}>🗑️</Text>
-                                <Text style={[styles.iconTileLabel, styles.iconTileLabelDestructive]}>מחיקה</Text>
+                                <Text style={[styles.iconTileLabel, styles.iconTileLabelDestructive]}>delete</Text>
                             </TouchableOpacity>
                         </View>
 
@@ -97,7 +97,7 @@ export default function TaskDetailModal({ visible, task, onClose, onToggle, onDe
                             activeOpacity={0.8}
                         >
                             <Text style={[styles.ctaText, task.isCompleted ? styles.ctaTextUndo : styles.ctaTextDo]}>
-                                {task.isCompleted ? '↩  החזר לרשימה' : '✓  סמן כבוצע'}
+                                {task.isCompleted ? '↩  Return to list' : '✓  Mark as done'}
                             </Text>
                         </TouchableOpacity>
 
