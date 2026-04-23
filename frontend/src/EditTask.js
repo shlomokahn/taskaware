@@ -71,7 +71,7 @@ export default function EditTask({ visible, task, onClose, onSave }) {
         if (!trimmed) return;
 
         if (dueDate <= new Date()) {
-            Alert.alert("תאריך לא תקין", "אנא בחר תאריך ושעה בעתיד");
+            Alert.alert("Invalid date", "Please select a future date and time");
             return;
         }
 
@@ -85,10 +85,10 @@ export default function EditTask({ visible, task, onClose, onSave }) {
                 style={styles.overlay}
             >
                 <View style={styles.card}>
-                    <Text style={styles.headerTitle}>עריכת משימה</Text>
+                    <Text style={styles.headerTitle}>Edit task</Text>
 
                     {/* Title input */}
-                    <Text style={styles.label}>שם המשימה</Text>
+                    <Text style={styles.label}>task name </Text>
                     <TextInput
                         style={styles.input}
                         value={title}
@@ -99,7 +99,7 @@ export default function EditTask({ visible, task, onClose, onSave }) {
                     />
 
                     {/* Date picker */}
-                    <Text style={styles.label}>תאריך ושעה</Text>
+                    <Text style={styles.label}>Date and time</Text>
                     <TouchableOpacity style={styles.dateTile} onPress={handlePickDate} activeOpacity={0.7}>
                         <Text style={styles.dateTileIcon}>📅</Text>
                         <Text style={styles.dateTileText}>{formatDate(dueDate)}</Text>
@@ -128,10 +128,10 @@ export default function EditTask({ visible, task, onClose, onSave }) {
                     {/* Buttons */}
                     <View style={styles.buttonRow}>
                         <TouchableOpacity style={[styles.btn, styles.saveBtn]} onPress={handleSave}>
-                            <Text style={styles.saveBtnText}>שמור שינויים</Text>
+                            <Text style={styles.saveBtnText}>Save changes</Text>
                         </TouchableOpacity>
                         <TouchableOpacity style={[styles.btn, styles.cancelBtn]} onPress={onClose}>
-                            <Text style={styles.cancelBtnText}>ביטול</Text>
+                            <Text style={styles.cancelBtnText}>cancellation</Text>
                         </TouchableOpacity>
                     </View>
                 </View>
