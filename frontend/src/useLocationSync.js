@@ -31,7 +31,7 @@ export const useLocationSync = (API_BASE, token) => {
                 body: JSON.stringify({
                     latitude: loc.coords.latitude,
                     longitude: loc.coords.longitude,
-                    address: "Israel" // כאן אפשר להוסיף המרת קואורדינטות לכתובת אם תרצה בעתיד
+                    address: "Israel" 
                 }),
             });
 

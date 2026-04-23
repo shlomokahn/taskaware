@@ -11,6 +11,3 @@ https://dashboard.render.com/
 console.neon.tech
 כניסה :
 דרך הגיטאב -> החשבון המכללתי של שלומי
-
-## Documentation Policy
-All project documentation must be written in English and kept concise.

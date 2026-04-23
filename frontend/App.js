@@ -41,7 +41,6 @@ export default function App() {
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
 
-    // ניהול טאבים
     const [activeTab, setActiveTab] = useState('home');
 
     const [newTitle, setNewTitle] = useState('');
@@ -62,7 +61,6 @@ export default function App() {
 
     const { location, syncLocation, isSyncing } = useLocationSync(API_BASE, token);
 
-    // --- התראות (ללא שינוי) ---
     useEffect(() => {
         Notifications.cancelAllScheduledNotificationsAsync();
         async function setupPushNotifications() {
@@ -291,7 +289,6 @@ export default function App() {
         Alert.alert('שגיאה', 'סנכרון המיקום נכשל, נסה שוב');
     };
 
-    // --- מסך התחברות ---
     if (!token) {
         return (
             <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.loginContainer}>
@@ -338,7 +335,6 @@ export default function App() {
         );
     }
 
-    // --- תוכן מסך הבית ---
     const renderHomeScreen = () => (
         <View style={{ flex: 1 }}>
             <View style={styles.header}>
@@ -377,7 +373,6 @@ export default function App() {
         </View>
     );
 
-    // --- תוכן מסך הגדרות (אזור אישי) ---
     const renderSettingsScreen = () => (
         <View style={styles.settingsContainer}>
             <Text style={styles.settingsTitle}>הגדרות ואזור אישי</Text>
@@ -412,7 +407,6 @@ export default function App() {
         </View>
     );
 
-    // --- מסך ראשי משולב ---
     return (
         <SafeAreaView style={styles.container}>
             {activeTab === 'home' ? renderHomeScreen() : renderSettingsScreen()}
@@ -580,7 +574,6 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
-    // (סגנונות קודמים נשמרים...)
     loginContainer: { flex: 1, justifyContent: 'center', backgroundColor: '#f3f4f6', paddingHorizontal: 20 },
     loginCard: { backgroundColor: '#fff', padding: 25, borderRadius: 24, shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.1, shadowRadius: 15, elevation: 5 },
     loginBrand: { fontSize: 36, fontWeight: '900', textAlign: 'center', marginBottom: 30, color: '#2f855a' },
@@ -621,7 +614,6 @@ const styles = StyleSheet.create({
     emptyState: { alignItems: 'center', marginTop: 40 },
     emptyStateText: { fontSize: 16, color: '#9ca3af' },
 
-    // סגנונות חדשים ל-Bottom Bar
     bottomBar: {
         flexDirection: 'row-reverse',
         height: 80,
@@ -647,7 +639,6 @@ const styles = StyleSheet.create({
     tabLabel: { fontSize: 12, fontWeight: 'bold', color: '#9ca3af', marginTop: 4 },
     tabLabelActive: { color: '#2f855a' },
 
-    // סגנונות למסך הגדרות
     settingsContainer: { flex: 1, padding: 25 },
     settingsTitle: { fontSize: 28, fontWeight: '900', color: '#111827', textAlign: 'right', marginBottom: 30 },
     profileCard: { backgroundColor: '#fff', padding: 30, borderRadius: 24, alignItems: 'center', marginBottom: 30, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 10, elevation: 2 },

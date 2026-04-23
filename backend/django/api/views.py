@@ -10,14 +10,9 @@ from exponent_server_sdk import PushClient, PushMessage
 from google import genai
 import os
 
-# --- פונקציית עזר לשליחת התראות (Helper) ---
 
 def send_expo_push_notification(expo_token, title, body):
-    """
-    פונקציית עזר לשליחת התראת פוש דרך שרתי Expo
-    """
     try:
-        # בדיקה שהטוקן תקין לפני השליחה
         if not expo_token or not expo_token.startswith("ExponentPushToken"):
             print(f"Invalid token: {expo_token}")
             return
@@ -66,7 +61,6 @@ def login(request):
 def update_location(request):
     user = request.user
     data = request.data
-    # כאן אפשר להוסיף לוגיקה שבודקת קרבה למשימות ושולחת פוש אם המשתמש קרוב
     print(f"📍 Location update for {user.username}: {data}")
     return Response({'status': 'Location updated successfully'})
 
@@ -110,23 +104,19 @@ def ask_ai(request):
         return Response({"error": "חסר שם משימה"}, status=400)
 
     try:
-        # אתחול הקליינט החדש של גוגל
         client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
         
         prompt = f"""אתה עוזר חכם לאפליקציית ניהול משימות. המשתמש ייתן לך תיאור של משימה, ועליך להחזיר *אך ורק* את סוג המקום (באנגלית או בעברית) שבו ניתן לבצע אותה. אל תוסיף שום הסבר.
         דוגמה: עבור 'לקנות חלב' תחזיר 'סופרמרקט'.
         המשימה: '{title}'"""
 
-        # קריאה למודל בסינטקס החדש
         response = client.models.generate_content(
             model='gemini-2.5-flash',
             contents=prompt,
         )
         
-        # ניקוי התשובה
         location_query = response.text.strip().replace('.', '')
 
-        # --- הוספת שליחת פוש כשה-AI מסיים לנתח ---
         try:
             profile = UserProfile.objects.get(user=request.user)
             if profile.expo_push_token:

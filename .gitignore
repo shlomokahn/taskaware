@@ -1,4 +1,3 @@
-# 1. החרגת ספריות וקבצים שנוצרו אוטומטית (Dependencies)
 /node_modules
 /backend/node_modules 
 
@@ -7,14 +6,12 @@ venv
 *.pyc
 __pycache__
 
-# 2. קבצי לוגים וקובצי פיתוח
 npm-debug.log*
 yarn-debug.log*
 npm-error.log*
 .DS_Store
 *.log
 
-# 3. החרגת משתני סביבה וסודות (CRITICAL SECURITY)
 .env
 .env.*
 

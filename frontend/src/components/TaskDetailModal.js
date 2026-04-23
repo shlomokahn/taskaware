@@ -26,7 +26,7 @@ export default function TaskDetailModal({ visible, task, onClose, onToggle, onDe
 
                     <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
 
-                        {/* כותרת וסטטוס */}
+                        {/* title */}
                         <View style={styles.titleRow}>
                             <Text style={[styles.title, task.isCompleted && styles.titleDone]} numberOfLines={3}>
                                 {task.title}
@@ -38,7 +38,7 @@ export default function TaskDetailModal({ visible, task, onClose, onToggle, onDe
                             </View>
                         </View>
 
-                        {/* תאריך — לחיצה פותחת עריכה מלאה */}
+                        {/* date */}
                         {dateInfo ? (
                             <TouchableOpacity style={styles.dateChip} onPress={() => onEdit(task)} activeOpacity={0.7}>
                                 <Text style={styles.dateChipIcon}>📅</Text>
@@ -54,7 +54,7 @@ export default function TaskDetailModal({ visible, task, onClose, onToggle, onDe
                             </TouchableOpacity>
                         )}
 
-                        {/* כרטיס המלצת AI — מוצג רק כשיש locationQuery */}
+                        {/* AI locationQuery */}
                         {task.locationQuery ? (
                             <View style={styles.aiCard}>
                                 <View style={styles.aiCardHeader}>
@@ -77,7 +77,7 @@ export default function TaskDetailModal({ visible, task, onClose, onToggle, onDe
                             </View>
                         ) : null}
 
-                        {/* פעולות */}
+                        {/* action */}
                         <View style={styles.iconRow}>
                             <TouchableOpacity style={styles.iconTile} onPress={() => onEdit(task)}>
                                 <Text style={styles.iconTileEmoji}>✏️</Text>
@@ -90,7 +90,7 @@ export default function TaskDetailModal({ visible, task, onClose, onToggle, onDe
                             </TouchableOpacity>
                         </View>
 
-                        {/* כפתור ראשי */}
+                        {/* main button */}
                         <TouchableOpacity
                             style={[styles.cta, task.isCompleted ? styles.ctaUndo : styles.ctaDo]}
                             onPress={() => onToggle(task)}

@@ -1,5 +1,5 @@
 import os
-import dj_database_url # הוסף את זה
+import dj_database_url 
 
 from pathlib import Path
 
@@ -28,15 +28,15 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'rest_framework',
-    'rest_framework.authtoken', # עבור טוקנים
-    'corsheaders',              # עבור גישה מהפרונטנד
-    'api',                      # האפליקציה שלנו
+    'rest_framework.authtoken', 
+    'corsheaders',              
+    'api',                     
 ]
 
 MIDDLEWARE = [
-    'corsheaders.middleware.CorsMiddleware', # חובה שיהיה ראשון
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
-    'whitenoise.middleware.WhiteNoiseMiddleware', # <-- הוסף את השורה הזו
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -75,7 +75,6 @@ DATABASES = {
     }
 }
 
-# אם אנחנו ב-Render, נתחבר לדאטאבייס האמיתי שלהם
 db_from_env = dj_database_url.config(conn_max_age=600)
 DATABASES['default'].update(db_from_env)
 
@@ -115,10 +114,8 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
 STATIC_URL = 'static/'
-# אפשור גישה מכל מקום (לפיתוח)
 CORS_ALLOW_ALL_ORIGINS = True
 
-# הגדרות REST Framework
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework.authentication.TokenAuthentication',
