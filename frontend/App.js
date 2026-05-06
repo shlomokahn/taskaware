@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -18,6 +19,7 @@ import { useLocationSync } from './src/useLocationSync.js';
 
 import TaskDetailModal from './src/components/TaskDetailModal';
 import EditTask from './src/EditTask';
+import UpdateChecker from './src/components/UpdateChecker';
 
 import * as Device from 'expo-device';
 import Constants from 'expo-constants';
@@ -271,6 +273,8 @@ export default function App() {
 
     return (
         <SafeAreaView style={styles.container}>
+            <UpdateChecker API_BASE={API_BASE} />
+
             {activeTab === 'home' ? renderHomeScreen() : renderSettingsScreen()}
 
             {/* Bottom Tab Bar */}
