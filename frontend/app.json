@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "TaskAware",
-    "slug": "taskaware",
+    "slug": "MyHelloWorldApp",
     "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./icon.png",
