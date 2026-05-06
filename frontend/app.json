@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "MyMyHelloWorldAppApp",
-    "slug": "MyHelloWorldApp",
+    "name": "TaskAware",
+    "slug": "taskaware",
     "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./icon.png",
-    "scheme": "mymyhelloworldappapp",
+    "scheme": "taskawareapp",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
