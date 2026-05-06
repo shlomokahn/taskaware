@@ -106,8 +106,8 @@ def ask_ai(request):
     try:
         client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
         
-        prompt = f"""אתה עוזר חכם לאפליקציית ניהול משימות. המשתמש ייתן לך תיאור של משימה, ועליך להחזיר *אך ורק* את סוג המקום (באנגלית או בעברית) שבו ניתן לבצע אותה. אל תוסיף שום הסבר.
-        דוגמה: עבור 'לקנות חלב' תחזיר 'סופרמרקט'.
+        prompt = f"""אתה עוזר חכם לאפליקציית ניהול משימות. המשתמש ייתן לך תיאור של משימה, ועליך להחזיר *אך ורק* את סוג המקום (באנגלית בלבד) שבו ניתן לבצע אותה. אל תוסיף שום הסבר.
+        דוגמה: עבור 'לקנות חלב' תחזיר 'supermarket'.
         המשימה: '{title}'"""
 
         response = client.models.generate_content(
@@ -122,8 +122,8 @@ def ask_ai(request):
             if profile.expo_push_token:
                 send_expo_push_notification(
                     expo_token=profile.expo_push_token,
-                    title="ה-AI מצא מיקום! 📍",
-                    body=f"עבור המשימה '{title}', חפש באזור: {location_query}"
+                    title="The AI ​​has found a location! 📍",
+                    body=f"for the task '{title}', Search the area: {location_query}"
                 )
         except Exception as e:
             print("Push error in AI:", str(e))

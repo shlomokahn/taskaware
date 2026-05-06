@@ -48,6 +48,9 @@ yarn-error.*
 .DS_Store
 *.pem
 
+# Visual Studio
+.vs
+
 # local env files
 .env*.local
 
