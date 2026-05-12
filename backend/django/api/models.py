@@ -48,3 +48,17 @@ class UserContext(models.Model):
 
     def __str__(self):
         return f"{self.user.username} - {self.key}"
+
+
+class AppVersion(models.Model):
+    version = models.CharField(max_length=20, unique=True)
+    release_notes = models.TextField()
+    is_mandatory = models.BooleanField(default=False)
+    released_at = models.DateTimeField(auto_now_add=True)
+    download_url = models.URLField(blank=True, null=True)
+
+    class Meta:
+        ordering = ['-released_at']
+
+    def __str__(self):
+        return self.version
