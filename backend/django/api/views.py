@@ -192,31 +192,31 @@ def ask_ai(request):
         print(f"AI Answered: {location_query}")
         return Response({"locationQuery": location_query})
 
-         except Exception as e:
-             print("Gemini API Error details:", str(e))
-             return Response({"error": "שגיאה בפנייה למודל ה-AI"}, status=500)
+    except Exception as e:
+        print("Gemini API Error details:", str(e))
+        return Response({"error": "שגיאה בפנייה למודל ה-AI"}, status=500)
 
 
-    @api_view(['GET'])
-    @permission_classes([AllowAny])
-    def check_update(request):
-        current_version = request.query_params.get('current_version')
-        latest = AppVersion.objects.order_by('-released_at').first()
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def check_update(request):
+    current_version = request.query_params.get('current_version')
+    latest = AppVersion.objects.order_by('-released_at').first()
 
-        if not latest:
-            return Response({"update_available": False})
+    if not latest:
+        return Response({"update_available": False})
 
-        update_available = True
-        if current_version:
-            try:
-                update_available = packaging_version.parse(latest.version) > packaging_version.parse(current_version)
-            except Exception:
-                update_available = True
+    update_available = True
+    if current_version:
+        try:
+            update_available = packaging_version.parse(latest.version) > packaging_version.parse(current_version)
+        except Exception:
+            update_available = True
 
-        return Response({
-            "update_available": update_available,
-            "version": latest.version,
-            "release_notes": latest.release_notes,
-            "is_mandatory": latest.is_mandatory,
-            "download_url": latest.download_url,
-        })
+    return Response({
+        "update_available": update_available,
+        "version": latest.version,
+        "release_notes": latest.release_notes,
+        "is_mandatory": latest.is_mandatory,
+        "download_url": latest.download_url,
+    })
