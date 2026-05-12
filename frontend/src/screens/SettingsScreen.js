@@ -1,5 +1,4 @@
 ﻿import React, { useState } from 'react';
-import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from 'react-native';
 import * as Updates from 'expo-updates';
 

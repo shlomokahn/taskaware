@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+﻿import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, RefreshControl, Modal, TextInput } from 'react-native';
 
 const EditContextModal = ({ visible, context, onClose, onSave }) => {
@@ -139,15 +139,15 @@ export default function UserContextScreen({ token, API_BASE, onClose }) {
         <View style={styles.container}>
             <View style={styles.header}>
                 <TouchableOpacity onPress={onClose} style={styles.backBtn}>
-                    <Text style={styles.backText}>? Back</Text>
+                    <Text style={styles.backText}>← Back</Text>
                 </TouchableOpacity>
-                <Text style={styles.title}>?? My Locations</Text>
+                <Text style={styles.title}>📍 My Locations</Text>
                 <View style={{ width: 60 }} />
             </View>
 
             {contexts.length === 0 ? (
                 <View style={styles.emptyState}>
-                    <Text style={styles.emptyIcon}>??</Text>
+                    <Text style={styles.emptyIcon}>📭</Text>
                     <Text style={styles.emptyText}>No locations saved yet</Text>
                     <Text style={styles.emptySubText}>Locations will be added when you create tasks</Text>
                 </View>
@@ -170,14 +170,14 @@ export default function UserContextScreen({ token, API_BASE, onClose }) {
                                         activeOpacity={0.7}
                                         onPress={() => setEditingContext(item)}
                                     >
-                                        <Text style={styles.editBtnText}>??</Text>
+                                        <Text style={styles.editBtnText}>✏️</Text>
                                     </TouchableOpacity>
                                     <TouchableOpacity
                                         style={[styles.editBtn, styles.deleteBtnStyle]}
                                         activeOpacity={0.7}
                                         onPress={() => deleteContext(item.id)}
                                     >
-                                        <Text style={styles.deleteBtnText}>???</Text>
+                                        <Text style={styles.deleteBtnText}>🗑️</Text>
                                     </TouchableOpacity>
                                 </View>
                             </View>
@@ -186,7 +186,7 @@ export default function UserContextScreen({ token, API_BASE, onClose }) {
                                 <View style={styles.metadata}>
                                     {item.metadata.hours && (
                                         <>
-                                            <Text style={styles.metadataLabel}>? Hours:</Text>
+                                            <Text style={styles.metadataLabel}>⏰ Hours:</Text>
                                             <Text style={styles.metadataValue}>{item.metadata.hours}</Text>
                                         </>
                                     )}
@@ -196,7 +196,7 @@ export default function UserContextScreen({ token, API_BASE, onClose }) {
                             <View style={styles.footer}>
                                 <Text style={styles.footerText}>Updated: {formatDate(item.last_updated)}</Text>
                                 {item.coords_lat && item.coords_lng && (
-                                    <Text style={styles.coordsText}>?? {parseFloat(item.coords_lat).toFixed(4)}, {parseFloat(item.coords_lng).toFixed(4)}</Text>
+                                    <Text style={styles.coordsText}>📌 {parseFloat(item.coords_lat).toFixed(4)}, {parseFloat(item.coords_lng).toFixed(4)}</Text>
                                 )}
                             </View>
                         </View>
