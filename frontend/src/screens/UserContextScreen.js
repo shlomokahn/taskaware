@@ -1,5 +1,57 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, RefreshControl } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import { View, Text, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, RefreshControl, Modal, TextInput } from 'react-native';
+
+const EditContextModal = ({ visible, context, onClose, onSave }) => {
+    const [value, setValue] = useState('');
+    const [hours, setHours] = useState('');
+
+    useEffect(() => {
+        if (visible && context) {
+            setValue(context.value || '');
+            setHours(context.metadata?.hours || '');
+        }
+    }, [visible, context]);
+
+    return (
+        <Modal transparent visible={visible} animationType="fade" onRequestClose={onClose}>
+            <View style={styles.modalOverlay}>
+                <View style={styles.modalContent}>
+                    <Text style={styles.modalTitle}>Edit Location</Text>
+
+                    <TextInput
+                        style={styles.input}
+                        placeholder="Address or location name"
+                        value={value}
+                        onChangeText={setValue}
+                        placeholderTextColor="#9ca3af"
+                    />
+
+                    <TextInput
+                        style={styles.input}
+                        placeholder="Working hours (optional)"
+                        value={hours}
+                        onChangeText={setHours}
+                        placeholderTextColor="#9ca3af"
+                    />
+
+                    <View style={styles.modalActions}>
+                        <TouchableOpacity style={styles.secondaryBtn} onPress={onClose}>
+                            <Text style={styles.secondaryText}>Cancel</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={[styles.primaryBtn, !value.trim() && styles.primaryBtnDisabled]}
+                            onPress={() => onSave(value.trim(), hours.trim())}
+                            disabled={!value.trim()}
+                        >
+                            <Text style={styles.primaryText}>Save</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </View>
+        </Modal>
+    );
+};
 
 export default function UserContextScreen({ token, API_BASE, onClose }) {
     const [contexts, setContexts] = useState([]);
@@ -116,12 +168,14 @@ export default function UserContextScreen({ token, API_BASE, onClose }) {
                                 <View style={styles.cardActions}>
                                     <TouchableOpacity
                                         style={styles.editBtn}
+                                        activeOpacity={0.7}
                                         onPress={() => setEditingContext(item)}
                                     >
                                         <Text style={styles.editBtnText}>??</Text>
                                     </TouchableOpacity>
                                     <TouchableOpacity
                                         style={[styles.editBtn, styles.deleteBtnStyle]}
+                                        activeOpacity={0.7}
                                         onPress={() => deleteContext(item.id)}
                                     >
                                         <Text style={styles.deleteBtnText}>???</Text>
@@ -129,10 +183,14 @@ export default function UserContextScreen({ token, API_BASE, onClose }) {
                                 </View>
                             </View>
 
-                            {item.metadata?.hours && (
+                            {item.metadata && Object.keys(item.metadata).length > 0 && (
                                 <View style={styles.metadata}>
-                                    <Text style={styles.metadataLabel}>? Hours:</Text>
-                                    <Text style={styles.metadataValue}>{item.metadata.hours}</Text>
+                                    {item.metadata.hours && (
+                                        <>
+                                            <Text style={styles.metadataLabel}>? Hours:</Text>
+                                            <Text style={styles.metadataValue}>{item.metadata.hours}</Text>
+                                        </>
+                                    )}
                                 </View>
                             )}
 
@@ -144,6 +202,34 @@ export default function UserContextScreen({ token, API_BASE, onClose }) {
                             </View>
                         </View>
                     )}
+                />
+            )}
+
+            {editingContext && (
+                <EditContextModal
+                    visible={!!editingContext}
+                    context={editingContext}
+                    onClose={() => setEditingContext(null)}
+                    onSave={async (value, hours) => {
+                        try {
+                            const res = await fetch(`${API_BASE}/api/user-context/${editingContext.id}/`, {
+                                method: 'PATCH',
+                                headers: { 'Content-Type': 'application/json', 'Authorization': `Token ${token}` },
+                                body: JSON.stringify({
+                                    value,
+                                    metadata: hours ? { hours } : {}
+                                })
+                            });
+                            if (res.ok) {
+                                const updated = await res.json();
+                                setContexts(prev => prev.map(c => c.id === updated.id ? updated : c));
+                                setEditingContext(null);
+                                Alert.alert('Success', 'Location updated');
+                            }
+                        } catch (error) {
+                            Alert.alert('Error', 'Failed to update location');
+                        }
+                    }}
                 />
             )}
         </View>
@@ -226,7 +312,69 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         paddingHorizontal: 20,
     },
-    emptyIcon: { fontSize: 64, marginBottom: 16 },
-    emptyText: { fontSize: 18, fontWeight: '700', color: '#111827', marginBottom: 8 },
-    emptySubText: { fontSize: 14, color: '#9ca3af', textAlign: 'center' },
-});
+        emptyIcon: { fontSize: 64, marginBottom: 16 },
+        emptyText: { fontSize: 18, fontWeight: '700', color: '#111827', marginBottom: 8 },
+        emptySubText: { fontSize: 14, color: '#9ca3af', textAlign: 'center' },
+        modalOverlay: {
+            flex: 1,
+            backgroundColor: 'rgba(0,0,0,0.45)',
+            justifyContent: 'center',
+            alignItems: 'center',
+            paddingHorizontal: 20,
+        },
+        modalContent: {
+            backgroundColor: '#fff',
+            borderRadius: 18,
+            padding: 20,
+            width: '100%',
+            maxWidth: 420,
+        },
+        modalTitle: {
+            fontSize: 18,
+            fontWeight: '800',
+            color: '#111827',
+            marginBottom: 16,
+        },
+        input: {
+            height: 46,
+            borderRadius: 12,
+            borderWidth: 1,
+            borderColor: '#e5e7eb',
+            paddingHorizontal: 12,
+            fontSize: 15,
+            backgroundColor: '#f9fafb',
+            marginBottom: 12,
+        },
+        modalActions: {
+            flexDirection: 'row',
+            gap: 10,
+            marginTop: 16,
+        },
+        secondaryBtn: {
+            flex: 1,
+            borderRadius: 12,
+            borderWidth: 1,
+            borderColor: '#e5e7eb',
+            paddingVertical: 12,
+            alignItems: 'center',
+            backgroundColor: '#f9fafb',
+        },
+        secondaryText: {
+            fontWeight: '700',
+            color: '#6b7280',
+        },
+        primaryBtn: {
+            flex: 1,
+            borderRadius: 12,
+            paddingVertical: 12,
+            alignItems: 'center',
+            backgroundColor: '#2f855a',
+        },
+        primaryBtnDisabled: {
+            backgroundColor: '#a7f3d0',
+        },
+        primaryText: {
+            fontWeight: '700',
+            color: '#fff',
+        },
+    });

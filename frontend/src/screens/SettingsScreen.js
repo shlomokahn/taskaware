@@ -1,9 +1,11 @@
 ﻿import React, { useState } from 'react';
+import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from 'react-native';
 import * as Updates from 'expo-updates';
 
 export default function SettingsScreen({ username, handleLogout, handleLocationSync, isSyncing, onOpenContextManager }) {
     const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
+    const [expandedPrivacy, setExpandedPrivacy] = useState(false);
 
     const handleCheckUpdate = async () => {
         setIsCheckingUpdate(true);
@@ -50,14 +52,32 @@ export default function SettingsScreen({ username, handleLogout, handleLocationS
                 <TouchableOpacity style={styles.settingsItem}>
                     <Text style={styles.settingsItemText}>🔔 Manage notifications</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.settingsItem} onPress={onOpenContextManager}>
-                    <Text style={styles.settingsItemText}>📍 Manage locations</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.settingsItem}>
-                    <Text style={styles.settingsItemText}>🛡️ privacy and security</Text>
-                </TouchableOpacity>
+
+                <View>
+                    <TouchableOpacity 
+                        style={styles.settingsItem}
+                        onPress={() => setExpandedPrivacy(!expandedPrivacy)}
+                    >
+                        <View style={styles.itemContent}>
+                            <Text style={styles.settingsItemText}>🛡️ Privacy and security</Text>
+                            <Text style={styles.expandIcon}>{expandedPrivacy ? '▼' : '▶'}</Text>
+                        </View>
+                    </TouchableOpacity>
+
+                    {expandedPrivacy && (
+                        <View style={styles.nestedItems}>
+                            <TouchableOpacity 
+                                style={styles.nestedItem}
+                                onPress={onOpenContextManager}
+                            >
+                                <Text style={styles.nestedItemText}>📍 Manage locations</Text>
+                            </TouchableOpacity>
+                        </View>
+                    )}
+                </View>
+
                 <TouchableOpacity style={styles.settingsItem} onPress={handleLocationSync} disabled={isSyncing}>
-                    <Text style={styles.settingsItemText}>{isSyncing ? '⏳ Synchronizes location...' : '📍 Location synchronization'}</Text>
+                    <Text style={styles.settingsItemText}>{isSyncing ? '⏳ Synchronizing location...' : '📍 Location synchronization'}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity 
                     style={styles.settingsItem} 
@@ -88,8 +108,13 @@ const styles = StyleSheet.create({
     profileName: { fontSize: 22, fontWeight: 'bold', color: '#1f2937' },
     profileSub: { fontSize: 14, color: '#6b7280', marginTop: 5 },
     settingsList: { gap: 15 },
-    settingsItem: { backgroundColor: '#fff', padding: 20, borderRadius: 16, flexDirection: 'row-reverse', alignItems: 'center' },
-    settingsItemText: { fontSize: 16, fontWeight: '600', color: '#374151' },
+    settingsItem: { backgroundColor: '#fff', padding: 20, borderRadius: 16, flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between' },
+    itemContent: { flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between', width: '100%' },
+    settingsItemText: { fontSize: 16, fontWeight: '600', color: '#374151', flex: 1 },
+    expandIcon: { fontSize: 12, color: '#9ca3af', fontWeight: '700' },
+    nestedItems: { backgroundColor: '#f9fafb', marginTop: 8, borderRadius: 12, overflow: 'hidden' },
+    nestedItem: { backgroundColor: '#fff', padding: 16, paddingLeft: 24, borderBottomWidth: 1, borderBottomColor: '#f0f0f0', flexDirection: 'row-reverse', alignItems: 'center' },
+    nestedItemText: { fontSize: 15, fontWeight: '500', color: '#6b7280' },
     logoutFullBtn: { marginTop: 'auto', marginBottom: 100, backgroundColor: '#fee2e2', padding: 18, borderRadius: 16, alignItems: 'center' },
     logoutFullText: { color: '#ef4444', fontWeight: 'bold', fontSize: 16 },
 });
