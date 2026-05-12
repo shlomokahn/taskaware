@@ -2,7 +2,7 @@
 import { View, Text, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from 'react-native';
 import * as Updates from 'expo-updates';
 
-export default function SettingsScreen({ username, handleLogout, handleLocationSync, isSyncing }) {
+export default function SettingsScreen({ username, handleLogout, handleLocationSync, isSyncing, onOpenContextManager }) {
     const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
 
     const handleCheckUpdate = async () => {
@@ -49,6 +49,9 @@ export default function SettingsScreen({ username, handleLogout, handleLocationS
             <View style={styles.settingsList}>
                 <TouchableOpacity style={styles.settingsItem}>
                     <Text style={styles.settingsItemText}>🔔 Manage notifications</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.settingsItem} onPress={onOpenContextManager}>
+                    <Text style={styles.settingsItemText}>📍 Manage locations</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.settingsItem}>
                     <Text style={styles.settingsItemText}>🛡️ privacy and security</Text>

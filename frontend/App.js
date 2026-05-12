@@ -27,6 +27,7 @@ import Constants from 'expo-constants';
 import LoginScreen from './src/screens/LoginScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import HomeScreen from './src/screens/HomeScreen';
+import UserContextScreen from './src/screens/UserContextScreen';
 import AddTaskModal from './src/components/AddTaskModal';
 
 Notifications.setNotificationHandler({
@@ -46,6 +47,7 @@ export default function App() {
     const [refreshing, setRefreshing] = useState(false);
 
     const [activeTab, setActiveTab] = useState('home');
+    const [showContextManager, setShowContextManager] = useState(false);
 
     // States for components (Add Modal handled inside)
     const [creating, setCreating] = useState(false);
@@ -330,12 +332,21 @@ export default function App() {
     );
 
     const renderSettingsScreen = () => (
-        <SettingsScreen
-            username={username}
-            handleLogout={handleLogout}
-            handleLocationSync={handleLocationSync}
-            isSyncing={isSyncing}
-        />
+        showContextManager ? (
+            <UserContextScreen
+                token={token}
+                API_BASE={API_BASE}
+                onClose={() => setShowContextManager(false)}
+            />
+        ) : (
+            <SettingsScreen
+                username={username}
+                handleLogout={handleLogout}
+                handleLocationSync={handleLocationSync}
+                isSyncing={isSyncing}
+                onOpenContextManager={() => setShowContextManager(true)}
+            />
+        )
     );
 
     return (
