@@ -19,6 +19,7 @@ import { useLocationSync } from './src/useLocationSync.js';
 import TaskDetailModal from './src/components/TaskDetailModal';
 import EditTask from './src/EditTask';
 import UpdateChecker from './src/components/UpdateChecker';
+import ContextPromptModal from './src/components/ContextPromptModal';
 
 import * as Device from 'expo-device';
 import Constants from 'expo-constants';
@@ -51,6 +52,8 @@ export default function App() {
     const [selectedTask, setSelectedTask] = useState(null);
     const [editingTask, setEditingTask] = useState(null);
     const [showAddModal, setShowAddModal] = useState(false);
+    const [pendingContexts, setPendingContexts] = useState([]);
+    const [activeContext, setActiveContext] = useState(null);
 
     const [token, setToken] = useState(null);
     const [username, setUsername] = useState('');
@@ -122,6 +125,26 @@ export default function App() {
         } catch (e) {
             console.error("Notification scheduling error:", e);
             return null;
+        }
+    };
+
+    const inferTaskContext = async (taskTitle) => {
+        if (!token) return;
+        try {
+            const res = await fetch(`${API_BASE}/api/tasks/infer-context/`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Token ${token}` },
+                body: JSON.stringify({ title: taskTitle }),
+            });
+            if (!res.ok) return;
+            const data = await res.json();
+            const pending = Array.isArray(data.pending_contexts) ? data.pending_contexts : [];
+            if (pending.length > 0) {
+                setPendingContexts(pending);
+                setActiveContext(pending[0]);
+            }
+        } catch (error) {
+            console.error('Context inference error:', error);
         }
     };
 
@@ -203,6 +226,7 @@ export default function App() {
             const created = await res.json();
             setTasks(prev => [created, ...prev]);
             setShowAddModal(false);
+            await inferTaskContext(titleTrimmed);
         } catch (err) {
             Alert.alert("Error", "Error saving the task");
             console.error(err);
@@ -252,6 +276,37 @@ export default function App() {
         }
 
         Alert.alert('Error', 'Location sync failed, please try again');
+    };
+
+    const saveUserContext = async (contextKey, value, hours) => {
+        try {
+            const res = await fetch(`${API_BASE}/api/user-context/`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Token ${token}` },
+                body: JSON.stringify({
+                    key: contextKey,
+                    value,
+                    metadata: hours ? { hours } : null,
+                    source: 'user',
+                    confidence: 1.0,
+                }),
+            });
+            if (!res.ok) {
+                console.warn('Failed saving context:', res.status);
+            }
+        } catch (error) {
+            console.error('Context save error:', error);
+        }
+    };
+
+    const advanceContextPrompt = (nextQueue) => {
+        if (nextQueue.length === 0) {
+            setPendingContexts([]);
+            setActiveContext(null);
+            return;
+        }
+        setPendingContexts(nextQueue);
+        setActiveContext(nextQueue[0]);
     };
 
     if (!token) {
@@ -356,6 +411,21 @@ export default function App() {
                 onClose={() => setShowAddModal(false)}
                 creating={creating}
                 onAddTask={handleCreateTask}
+            />
+
+            <ContextPromptModal
+                visible={!!activeContext}
+                contextLabel={activeContext?.label || activeContext?.key}
+                onSave={async (value, hours) => {
+                    if (!activeContext) return;
+                    await saveUserContext(activeContext.key, value, hours);
+                    const nextQueue = pendingContexts.slice(1);
+                    advanceContextPrompt(nextQueue);
+                }}
+                onSkip={() => {
+                    const nextQueue = pendingContexts.slice(1);
+                    advanceContextPrompt(nextQueue);
+                }}
             />
 
         </SafeAreaView>

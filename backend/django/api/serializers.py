@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from rest_framework import serializers
-from .models import Task, AppVersion
+from .models import Task, AppVersion, UserContext
 from django.contrib.auth.models import User
 
 class TaskSerializer(serializers.ModelSerializer):
@@ -8,10 +8,11 @@ class TaskSerializer(serializers.ModelSerializer):
     isCompleted = serializers.BooleanField(source='is_completed', required=False)
     createdAt = serializers.DateTimeField(source='created_at', read_only=True)
     dueDate = serializers.DateTimeField(source='due_date', required=False, allow_null=True)
+    locationQuery = serializers.CharField(source='locationQuery', required=False, allow_blank=True, allow_null=True)
 
     class Meta:
         model = Task
-        fields = ['_id', 'title', 'isCompleted', 'createdAt', 'dueDate']
+        fields = ['_id', 'title', 'isCompleted', 'createdAt', 'dueDate', 'locationQuery']
 
 class UserSerializer(serializers.ModelSerializer):
     class Meta:

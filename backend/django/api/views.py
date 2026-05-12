@@ -5,8 +5,8 @@ from rest_framework.response import Response
 from rest_framework import status, viewsets
 from rest_framework.authtoken.models import Token
 from django.contrib.auth import authenticate
-from .models import Task, UserProfile, AppVersion
-from .serializers import TaskSerializer, UserSerializer, AppVersionSerializer
+from .models import Task, UserProfile, AppVersion, UserContext
+from .serializers import TaskSerializer, UserSerializer, AppVersionSerializer, UserContextSerializer
 from exponent_server_sdk import PushClient, PushMessage
 from google import genai
 import os
@@ -93,8 +93,66 @@ class TaskViewSet(viewsets.ModelViewSet):
         task = serializer.save(user=self.request.user)
 
 
+class UserContextViewSet(viewsets.ModelViewSet):
+    serializer_class = UserContextSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return UserContext.objects.filter(user=self.request.user).order_by('key')
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
+
 
 # --- AI Logic ---
+
+ANCHOR_MAP = {
+    'עבודה': UserContext.ContextKey.WORK,
+    'בית': UserContext.ContextKey.HOME,
+    'לימודים': UserContext.ContextKey.SCHOOL,
+    'אוניברסיטה': UserContext.ContextKey.SCHOOL,
+    'חדר כושר': UserContext.ContextKey.GYM,
+    'work': UserContext.ContextKey.WORK,
+    'home': UserContext.ContextKey.HOME,
+    'school': UserContext.ContextKey.SCHOOL,
+    'gym': UserContext.ContextKey.GYM,
+}
+
+
+def infer_context_keys(text):
+    if not text:
+        return set()
+    lowered = text.lower()
+    matched = set()
+    for anchor, key in ANCHOR_MAP.items():
+        if anchor in lowered:
+            matched.add(key)
+    return matched
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def infer_context(request):
+    title = request.data.get('title', '')
+    inferred_keys = infer_context_keys(title)
+    if not inferred_keys:
+        return Response({"pending_contexts": [], "matched_contexts": []})
+
+    existing = set(
+        UserContext.objects.filter(user=request.user, key__in=inferred_keys)
+        .values_list('key', flat=True)
+    )
+
+    pending = [key for key in inferred_keys if key not in existing]
+    matched = [key for key in inferred_keys if key in existing]
+
+    label_map = {choice.value: choice.label for choice in UserContext.ContextKey}
+
+    return Response({
+        "pending_contexts": [{"key": key, "label": label_map.get(key, key)} for key in pending],
+        "matched_contexts": [{"key": key, "label": label_map.get(key, key)} for key in matched],
+    })
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
