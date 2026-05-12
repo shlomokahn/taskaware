@@ -13,6 +13,7 @@ urlpatterns = [
     path('location/', views.update_location, name='update_location'),
     path('save-push-token/', views.save_push_token, name='save_push_token'),
     path('ask-ai/', views.ask_ai, name='ask-ai'),
+    path('check-update/', views.check_update, name='check-update'),
     path('tasks/infer-context/', views.infer_context, name='infer-context'),
     path('', include(router.urls)),
 ]

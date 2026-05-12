@@ -10,6 +10,7 @@ from .serializers import TaskSerializer, UserSerializer, AppVersionSerializer, U
 from exponent_server_sdk import PushClient, PushMessage
 from google import genai
 import os
+from packaging import version as packaging_version
 
 
 def send_expo_push_notification(expo_token, title, body):
