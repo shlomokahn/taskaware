@@ -1,5 +1,4 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import React, { useCallback, useEffect, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -100,9 +99,12 @@ export default function App() {
 
     const scheduleNotification = async (taskTitle, date) => {
         const triggerDate = new Date(date);
-        if (triggerDate <= new Date()) return null;
+        if (triggerDate <= new Date()) {
+            console.warn('Notification date is in the past:', triggerDate);
+            return null;
+        }
         try {
-            return await Notifications.scheduleNotificationAsync({
+            const notifId = await Notifications.scheduleNotificationAsync({
                 content: {
                     title: "Task Reminder! 🔔",
                     body: taskTitle,
@@ -115,6 +117,8 @@ export default function App() {
                     channelId: 'default',
                 },
             });
+            console.log('Notification scheduled:', notifId);
+            return notifId;
         } catch (e) {
             console.error("Notification scheduling error:", e);
             return null;
@@ -129,9 +133,17 @@ export default function App() {
         if (!token) return;
         try {
             const res = await fetch(`${API_BASE}/api/tasks/`, { headers: { 'Authorization': `Token ${token}` } });
+            if (!res.ok) {
+                console.error('Fetch tasks error:', res.status);
+                setTasks([]);
+                return;
+            }
             const data = await res.json();
             setTasks(Array.isArray(data) ? data : []);
-        } catch (err) { console.log('Fetch error:', err); }
+        } catch (err) { 
+            console.error('Fetch error:', err);
+            setTasks([]);
+        }
         finally { setLoading(false); setRefreshing(false); }
     }, [token]);
 

@@ -1,7 +1,39 @@
-﻿import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+﻿import React, { useState } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from 'react-native';
+import * as Updates from 'expo-updates';
 
 export default function SettingsScreen({ username, handleLogout, handleLocationSync, isSyncing }) {
+    const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
+
+    const handleCheckUpdate = async () => {
+        setIsCheckingUpdate(true);
+        try {
+            const update = await Updates.checkForUpdateAsync();
+            if (update.isAvailable) {
+                Alert.alert(
+                    'Update Available',
+                    'A new version is available. Download and install now?',
+                    [
+                        { text: 'Later', onPress: () => setIsCheckingUpdate(false) },
+                        {
+                            text: 'Update',
+                            onPress: async () => {
+                                await Updates.fetchUpdateAsync();
+                                await Updates.reloadAsync();
+                            }
+                        }
+                    ]
+                );
+            } else {
+                Alert.alert('Up to Date', 'You are running the latest version');
+                setIsCheckingUpdate(false);
+            }
+        } catch (error) {
+            Alert.alert('Error', 'Failed to check for updates');
+            setIsCheckingUpdate(false);
+        }
+    };
+
     return (
         <View style={styles.settingsContainer}>
             <Text style={styles.settingsTitle}>Settings</Text>
@@ -23,6 +55,17 @@ export default function SettingsScreen({ username, handleLogout, handleLocationS
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.settingsItem} onPress={handleLocationSync} disabled={isSyncing}>
                     <Text style={styles.settingsItemText}>{isSyncing ? '⏳ Synchronizes location...' : '📍 Location synchronization'}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                    style={styles.settingsItem} 
+                    onPress={handleCheckUpdate}
+                    disabled={isCheckingUpdate}
+                >
+                    {isCheckingUpdate ? (
+                        <ActivityIndicator color="#2f855a" />
+                    ) : (
+                        <Text style={styles.settingsItemText}>🔄 Check for Updates</Text>
+                    )}
                 </TouchableOpacity>
             </View>
 

@@ -1,5 +1,6 @@
 from rest_framework import serializers
-from .models import Task
+from rest_framework import serializers
+from .models import Task, AppVersion
 from django.contrib.auth.models import User
 
 class TaskSerializer(serializers.ModelSerializer):
@@ -21,3 +22,8 @@ class UserSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         user = User.objects.create_user(**validated_data)
         return user
+
+class AppVersionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AppVersion
+        fields = ['id', 'version', 'release_notes', 'is_mandatory', 'released_at', 'download_url']

@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react';
-import React, { useEffect, useState } from 'react';
 import { Alert, View, Text, TouchableOpacity, Modal, StyleSheet, ActivityIndicator } from 'react-native';
 import * as Updates from 'expo-updates';
 import * as Application from 'expo-application';
@@ -24,6 +23,12 @@ export default function UpdateChecker({ API_BASE }) {
             const response = await fetch(
                 `${API_BASE}/api/check-update/?current_version=${currentVersion}`
             );
+
+            if (!response.ok) {
+                console.warn('API returned error:', response.status);
+                return;
+            }
+
             const data = await response.json();
 
             if (data.update_available) {
