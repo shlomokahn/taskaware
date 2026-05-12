@@ -28,3 +28,8 @@ class AppVersionSerializer(serializers.ModelSerializer):
     class Meta:
         model = AppVersion
         fields = ['id', 'version', 'release_notes', 'is_mandatory', 'released_at', 'download_url']
+
+class UserContextSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = UserContext
+        fields = ['id', 'key', 'value', 'coords_lat', 'coords_lng', 'metadata', 'confidence', 'source', 'last_updated']
