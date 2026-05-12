@@ -94,6 +94,15 @@ class TaskViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         task = serializer.save(user=self.request.user)
 
+    def list(self, request, *args, **kwargs):
+        try:
+            return super().list(request, *args, **kwargs)
+        except Exception as e:
+            print(f"Error in TaskViewSet.list: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return Response({"error": f"Server error: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 class UserContextViewSet(viewsets.ModelViewSet):
     serializer_class = UserContextSerializer
