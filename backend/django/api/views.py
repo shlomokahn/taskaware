@@ -523,3 +523,75 @@ def check_update(request):
         "is_mandatory": latest.is_mandatory,
         "download_url": latest.download_url,
     })
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def google_places_autocomplete(request):
+    query = request.query_params.get('input', '').strip()
+    if not query:
+        return Response({'predictions': []})
+
+    if not GOOGLE_PLACES_API_KEY:
+        return Response({'error': 'Google Places API key is missing'}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+
+    params = {
+        'input': query,
+        'key': GOOGLE_PLACES_API_KEY,
+        'language': 'he',
+        'types': 'address',
+    }
+    url = 'https://maps.googleapis.com/maps/api/place/autocomplete/json?' + urllib.parse.urlencode(params)
+    request_obj = urllib.request.Request(url)
+    with urllib.request.urlopen(request_obj, timeout=20) as response:
+        payload = json.loads(response.read().decode('utf-8'))
+
+    if payload.get('status') not in ('OK', 'ZERO_RESULTS'):
+        return Response({'error': payload.get('error_message') or payload.get('status')}, status=status.HTTP_502_BAD_GATEWAY)
+
+    predictions = []
+    for item in payload.get('predictions', []):
+        structured = item.get('structured_formatting') or {}
+        predictions.append({
+            'description': item.get('description'),
+            'place_id': item.get('place_id'),
+            'main_text': structured.get('main_text') or item.get('description'),
+            'secondary_text': structured.get('secondary_text') or '',
+        })
+
+    return Response({'predictions': predictions})
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def google_place_details(request):
+    place_id = request.query_params.get('place_id', '').strip()
+    if not place_id:
+        return Response({'error': 'Missing place_id'}, status=status.HTTP_400_BAD_REQUEST)
+
+    if not GOOGLE_PLACES_API_KEY:
+        return Response({'error': 'Google Places API key is missing'}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+
+    params = {
+        'place_id': place_id,
+        'fields': 'place_id,name,formatted_address,geometry,address_component',
+        'language': 'he',
+        'key': GOOGLE_PLACES_API_KEY,
+    }
+    url = 'https://maps.googleapis.com/maps/api/place/details/json?' + urllib.parse.urlencode(params)
+    request_obj = urllib.request.Request(url)
+    with urllib.request.urlopen(request_obj, timeout=20) as response:
+        payload = json.loads(response.read().decode('utf-8'))
+
+    if payload.get('status') != 'OK':
+        return Response({'error': payload.get('error_message') or payload.get('status')}, status=status.HTTP_502_BAD_GATEWAY)
+
+    result = payload.get('result') or {}
+    location = (result.get('geometry') or {}).get('location') or {}
+    return Response({
+        'place_id': result.get('place_id') or place_id,
+        'name': result.get('name'),
+        'formatted_address': result.get('formatted_address'),
+        'coords_lat': location.get('lat'),
+        'coords_lng': location.get('lng'),
+    })

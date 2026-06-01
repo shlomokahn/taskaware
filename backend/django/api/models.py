@@ -7,6 +7,7 @@ class Task(models.Model):
     is_completed = models.BooleanField(default=False)
     due_date = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    notification_id = models.CharField(max_length=255, null=True, blank=True)
     
     location_trigger = models.JSONField(null=True, blank=True)
     locationQuery = models.CharField(max_length=255, null=True, blank=True)

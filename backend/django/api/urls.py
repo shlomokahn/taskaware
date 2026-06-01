@@ -16,5 +16,7 @@ urlpatterns = [
     path('check-update/', views.check_update, name='check-update'),
     path('tasks/infer-context/', views.infer_context, name='infer-context'),
     path('tasks/<int:pk>/nearby-places/', views.nearby_places, name='task-nearby-places'),
+    path('google-places/autocomplete/', views.google_places_autocomplete, name='google-places-autocomplete'),
+    path('google-places/details/', views.google_place_details, name='google-place-details'),
     path('', include(router.urls)),
 ]

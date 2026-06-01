@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import {
     Modal,
     View,
@@ -14,30 +14,32 @@ import DateTimePicker, { DateTimePickerAndroid } from '@react-native-community/d
 
 export default function EditTask({ visible, task, onClose, onSave }) {
     const [title, setTitle] = useState('');
-    const [dueDate, setDueDate] = useState(new Date());
+    const [reminderDate, setReminderDate] = useState(null);
     const [showIOSPicker, setShowIOSPicker] = useState(false);
 
     useEffect(() => {
         if (task) {
             setTitle(task.title);
-            setDueDate(task.dueDate ? new Date(task.dueDate) : new Date());
+            setReminderDate(task.dueDate ? new Date(task.dueDate) : null);
+            setShowIOSPicker(false);
         }
     }, [task]);
 
     if (!task) return null;
 
     const formatDate = (date) => {
-        if (!date) return '—';
+        if (!date) return 'No reminder';
         const d = new Date(date);
-        return isNaN(d.getTime()) ? '—' : d.toLocaleString('he-IL', {
+        return isNaN(d.getTime()) ? 'No reminder' : d.toLocaleString('he-IL', {
             day: '2-digit', month: '2-digit', year: '2-digit',
             hour: '2-digit', minute: '2-digit'
         });
     };
 
     const openAndroidPicker = () => {
+        const baseDate = reminderDate || new Date();
         DateTimePickerAndroid.open({
-            value: dueDate,
+            value: baseDate,
             mode: 'date',
             display: 'calendar',
             onChange: (event, selectedDate) => {
@@ -49,7 +51,7 @@ export default function EditTask({ visible, task, onClose, onSave }) {
                         display: 'clock',
                         onChange: (timeEvent, finalDate) => {
                             if (timeEvent.type === 'set' && finalDate) {
-                                setDueDate(finalDate);
+                                setReminderDate(finalDate);
                             }
                         },
                     });
@@ -58,7 +60,7 @@ export default function EditTask({ visible, task, onClose, onSave }) {
         });
     };
 
-    const handlePickDate = () => {
+    const handlePickReminder = () => {
         if (Platform.OS === 'android') {
             openAndroidPicker();
         } else {
@@ -70,12 +72,12 @@ export default function EditTask({ visible, task, onClose, onSave }) {
         const trimmed = title.trim();
         if (!trimmed) return;
 
-        if (dueDate <= new Date()) {
-            Alert.alert("Invalid date", "Please select a future date and time");
+        if (reminderDate && reminderDate <= new Date()) {
+            Alert.alert('Invalid reminder', 'Please select a future reminder time');
             return;
         }
 
-        onSave(task._id || task.id, trimmed, dueDate.toISOString());
+        onSave(task._id || task.id, trimmed, reminderDate ? reminderDate.toISOString() : null);
     };
 
     return (
@@ -87,8 +89,7 @@ export default function EditTask({ visible, task, onClose, onSave }) {
                 <View style={styles.card}>
                     <Text style={styles.headerTitle}>Edit task</Text>
 
-                    {/* Title input */}
-                    <Text style={styles.label}>task name </Text>
+                    <Text style={styles.label}>task name</Text>
                     <TextInput
                         style={styles.input}
                         value={title}
@@ -98,22 +99,30 @@ export default function EditTask({ visible, task, onClose, onSave }) {
                         selectionColor="#2f855a"
                     />
 
-                    {/* Date picker */}
-                    <Text style={styles.label}>Date and time</Text>
-                    <TouchableOpacity style={styles.dateTile} onPress={handlePickDate} activeOpacity={0.7}>
-                        <Text style={styles.dateTileIcon}>📅</Text>
-                        <Text style={styles.dateTileText}>{formatDate(dueDate)}</Text>
+                    <Text style={styles.label}>Reminder</Text>
+                    <TouchableOpacity style={styles.dateTile} onPress={handlePickReminder} activeOpacity={0.7}>
+                        <Text style={styles.dateTileIcon}>⏰</Text>
+                        <Text style={styles.dateTileText}>{formatDate(reminderDate)}</Text>
                         <Text style={styles.dateTileChevron}>›</Text>
                     </TouchableOpacity>
 
-                    {/* iOS inline picker */}
+                    <View style={styles.reminderActions}>
+                        <TouchableOpacity
+                            style={styles.clearBtn}
+                            onPress={() => setReminderDate(null)}
+                            disabled={!reminderDate}
+                        >
+                            <Text style={[styles.clearBtnText, !reminderDate && styles.disabledText]}>Remove reminder</Text>
+                        </TouchableOpacity>
+                    </View>
+
                     {Platform.OS === 'ios' && showIOSPicker && (
                         <View style={styles.iosPickerWrap}>
                             <DateTimePicker
-                                value={dueDate}
+                                value={reminderDate || new Date()}
                                 mode="datetime"
                                 display="spinner"
-                                onChange={(e, d) => d && setDueDate(d)}
+                                onChange={(e, d) => d && setReminderDate(d)}
                                 locale="he"
                             />
                             <TouchableOpacity
@@ -125,7 +134,6 @@ export default function EditTask({ visible, task, onClose, onSave }) {
                         </View>
                     )}
 
-                    {/* Buttons */}
                     <View style={styles.buttonRow}>
                         <TouchableOpacity style={[styles.btn, styles.saveBtn]} onPress={handleSave}>
                             <Text style={styles.saveBtnText}>Save changes</Text>
@@ -192,7 +200,7 @@ const styles = StyleSheet.create({
         borderColor: '#e5e7eb',
         paddingHorizontal: 14,
         height: 55,
-        marginBottom: 25,
+        marginBottom: 10,
         gap: 10,
     },
     dateTileIcon: { fontSize: 20 },
@@ -207,6 +215,22 @@ const styles = StyleSheet.create({
         fontSize: 20,
         color: '#9CA3AF',
         marginLeft: 4,
+    },
+    reminderActions: {
+        flexDirection: 'row',
+        justifyContent: 'flex-start',
+        marginBottom: 18,
+    },
+    clearBtn: {
+        paddingVertical: 6,
+        paddingHorizontal: 2,
+    },
+    clearBtnText: {
+        color: '#ef4444',
+        fontWeight: '700',
+    },
+    disabledText: {
+        color: '#9ca3af',
     },
     iosPickerWrap: {
         backgroundColor: '#f9fafb',

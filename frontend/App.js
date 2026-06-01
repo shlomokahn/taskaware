@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+﻿import React, { useCallback, useEffect, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -49,7 +49,6 @@ export default function App() {
     const [activeTab, setActiveTab] = useState('home');
     const [showContextManager, setShowContextManager] = useState(false);
 
-    // States for components (Add Modal handled inside)
     const [creating, setCreating] = useState(false);
     const [selectedTask, setSelectedTask] = useState(null);
     const [editingTask, setEditingTask] = useState(null);
@@ -60,7 +59,6 @@ export default function App() {
     const [token, setToken] = useState(null);
     const [username, setUsername] = useState('');
 
-    // Auth syncing
     const { location, syncLocation, isSyncing } = useLocationSync(API_BASE, token);
 
     useEffect(() => {
@@ -95,7 +93,9 @@ export default function App() {
                             headers: { 'Content-Type': 'application/json', 'Authorization': `Token ${token}` },
                             body: JSON.stringify({ token: pushTokenString }),
                         });
-                    } catch (error) { console.error("Error getting or sending push token:", error); }
+                    } catch (error) {
+                        console.error('Error getting or sending push token:', error);
+                    }
                 }
             }
         }
@@ -111,7 +111,7 @@ export default function App() {
         try {
             const notifId = await Notifications.scheduleNotificationAsync({
                 content: {
-                    title: "Task Reminder! 🔔",
+                    title: 'Task Reminder! 🔔',
                     body: taskTitle,
                     sound: true,
                     priority: (Notifications.AndroidPriority && Notifications.AndroidPriority.HIGH) || 1,
@@ -125,7 +125,7 @@ export default function App() {
             console.log('Notification scheduled:', notifId);
             return notifId;
         } catch (e) {
-            console.error("Notification scheduling error:", e);
+            console.error('Notification scheduling error:', e);
             return null;
         }
     };
@@ -165,11 +165,13 @@ export default function App() {
             }
             const data = await res.json();
             setTasks(Array.isArray(data) ? data : []);
-        } catch (err) { 
+        } catch (err) {
             console.error('Fetch error:', err);
             setTasks([]);
+        } finally {
+            setLoading(false);
+            setRefreshing(false);
         }
-        finally { setLoading(false); setRefreshing(false); }
     }, [token]);
 
     useEffect(() => {
@@ -195,42 +197,38 @@ export default function App() {
             const data = await res.json();
             return data.locationQuery || null;
         } catch (error) {
-            console.error("AI location fetch error:", error);
+            console.error('AI location fetch error:', error);
             return null;
         }
     };
 
-    const handleCreateTask = async (titlePassed, dueDatePassed, isSmartTaskPassed) => {
+    const handleCreateTask = async (titlePassed, reminderDatePassed) => {
         const titleTrimmed = titlePassed.trim();
         if (!titleTrimmed || !token) return;
-        if (dueDatePassed <= new Date()) {
-            Alert.alert("Invalid Date", "Please select a date and time in the future.");
-            return;
-        }
         setCreating(true);
         try {
-            let suggestedLocation = '';
-            if (isSmartTaskPassed) {
-                suggestedLocation = await fetchLocationFromAI(titleTrimmed);
+            const suggestedLocation = await fetchLocationFromAI(titleTrimmed);
+            const notifId = reminderDatePassed ? await scheduleNotification(titleTrimmed, reminderDatePassed) : null;
+            const payload = {
+                title: titleTrimmed,
+                notificationId: notifId,
+                locationQuery: suggestedLocation,
+            };
+            if (reminderDatePassed) {
+                payload.dueDate = reminderDatePassed.toISOString();
             }
-            const notifId = await scheduleNotification(titleTrimmed, dueDatePassed);
             const res = await fetch(`${API_BASE}/api/tasks/`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Token ${token}` },
-                body: JSON.stringify({
-                    title: titleTrimmed,
-                    dueDate: dueDatePassed.toISOString(),
-                    notificationId: notifId,
-                    locationQuery: suggestedLocation
-                }),
+                body: JSON.stringify(payload),
             });
-            if (!res.ok) throw new Error("Failed to save task");
+            if (!res.ok) throw new Error('Failed to save task');
             const created = await res.json();
             setTasks(prev => [created, ...prev]);
             setShowAddModal(false);
             await inferTaskContext(titleTrimmed);
         } catch (err) {
-            Alert.alert("Error", "Error saving the task");
+            Alert.alert('Error', 'Error saving the task');
             console.error(err);
         } finally {
             setCreating(false);
@@ -247,13 +245,15 @@ export default function App() {
             const updated = await res.json();
             setTasks(prev => prev.map(t => (t._id || t.id) === taskId ? updated : t));
             return updated;
-        } catch (err) { console.error(err); }
+        } catch (err) {
+            console.error(err);
+        }
     };
 
     const formatDisplayDate = (date) => {
-        if (!date) return 'Select date';
+        if (!date) return 'No reminder';
         const d = new Date(date);
-        return isNaN(d.getTime()) ? 'Invalid date' : d.toLocaleString('en-US', {
+        return isNaN(d.getTime()) ? 'No reminder' : d.toLocaleString('en-US', {
             day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'
         });
     };
@@ -280,16 +280,19 @@ export default function App() {
         Alert.alert('Error', 'Location sync failed, please try again');
     };
 
-    const saveUserContext = async (contextKey, value, hours) => {
+    const saveUserContext = async (contextKey, value, hours, place) => {
         try {
+            const hasCoords = place?.coords_lat != null && place?.coords_lng != null;
             const res = await fetch(`${API_BASE}/api/user-context/`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Token ${token}` },
                 body: JSON.stringify({
                     key: contextKey,
                     value,
+                    coords_lat: hasCoords ? place.coords_lat : null,
+                    coords_lng: hasCoords ? place.coords_lng : null,
                     metadata: hours ? { hours } : null,
-                    source: 'user',
+                    source: hasCoords ? 'google_places' : 'user',
                     confidence: 1.0,
                 }),
             });
@@ -355,12 +358,8 @@ export default function App() {
 
             {activeTab === 'home' ? renderHomeScreen() : renderSettingsScreen()}
 
-            {/* Bottom Tab Bar */}
             <View style={styles.bottomBar}>
-                <TouchableOpacity
-                    style={styles.tabItem}
-                    onPress={() => setActiveTab('home')}
-                >
+                <TouchableOpacity style={styles.tabItem} onPress={() => setActiveTab('home')}>
                     <Text style={[styles.tabIcon, activeTab === 'home' && styles.tabIconActive]}>🏠</Text>
                     <Text style={[styles.tabLabel, activeTab === 'home' && styles.tabLabelActive]}>Home</Text>
                 </TouchableOpacity>
@@ -369,16 +368,12 @@ export default function App() {
                     <Text style={styles.addFloatingText}>＋</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity
-                    style={styles.tabItem}
-                    onPress={() => setActiveTab('settings')}
-                >
+                <TouchableOpacity style={styles.tabItem} onPress={() => setActiveTab('settings')}>
                     <Text style={[styles.tabIcon, activeTab === 'settings' && styles.tabIconActive]}>👤</Text>
                     <Text style={[styles.tabLabel, activeTab === 'settings' && styles.tabLabelActive]}>Profile</Text>
                 </TouchableOpacity>
             </View>
 
-            {/* Modals */}
             <TaskDetailModal
                 visible={!!selectedTask}
                 task={selectedTask}
@@ -405,21 +400,20 @@ export default function App() {
                 visible={!!editingTask}
                 task={editingTask}
                 onClose={() => setEditingTask(null)}
-                onSave={async (id, title, newDueDate) => {
-                    if (newDueDate && editingTask?.notificationId) {
+                onSave={async (id, title, newReminderDate) => {
+                    if (editingTask?.notificationId) {
                         await cancelNotification(editingTask.notificationId);
                     }
-                    const newNotifId = newDueDate ? await scheduleNotification(title, newDueDate) : editingTask?.notificationId;
+                    const newNotifId = newReminderDate ? await scheduleNotification(title, newReminderDate) : null;
                     await handleUpdateTask(id, {
                         title,
-                        ...(newDueDate && { dueDate: newDueDate }),
-                        ...(newNotifId && { notificationId: newNotifId }),
+                        ...(newReminderDate ? { dueDate: newReminderDate } : { dueDate: null }),
+                        ...(newNotifId ? { notificationId: newNotifId } : { notificationId: null }),
                     });
                     setEditingTask(null);
                 }}
             />
 
-            {/* Add Task Modal Integration */}
             <AddTaskModal
                 visible={showAddModal}
                 onClose={() => setShowAddModal(false)}
@@ -430,9 +424,10 @@ export default function App() {
             <ContextPromptModal
                 visible={!!activeContext}
                 contextLabel={activeContext?.label || activeContext?.key}
-                onSave={async (value, hours) => {
+                API_BASE={API_BASE}
+                onSave={async (value, hours, place) => {
                     if (!activeContext) return;
-                    await saveUserContext(activeContext.key, value, hours);
+                    await saveUserContext(activeContext.key, value, hours, place);
                     const nextQueue = pendingContexts.slice(1);
                     advanceContextPrompt(nextQueue);
                 }}
@@ -441,7 +436,6 @@ export default function App() {
                     advanceContextPrompt(nextQueue);
                 }}
             />
-
         </SafeAreaView>
     );
 }
@@ -465,7 +459,7 @@ const styles = StyleSheet.create({
         shadowColor: '#000',
         shadowOffset: { width: 0, height: -3 },
         shadowOpacity: 0.1,
-        shadowRadius: 10
+        shadowRadius: 10,
     },
     tabItem: { alignItems: 'center', justifyContent: 'center', flex: 1 },
     tabIcon: { fontSize: 24, opacity: 0.4 },
