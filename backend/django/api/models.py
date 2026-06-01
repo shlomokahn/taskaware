@@ -1,5 +1,4 @@
 from django.db import models
-from django.db import models
 from django.contrib.auth.models import User
 
 class Task(models.Model):
@@ -19,6 +18,9 @@ class Task(models.Model):
 class UserProfile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
     expo_push_token = models.CharField(max_length=255, blank=True, null=True)
+    coords_lat = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    coords_lng = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    location_updated_at = models.DateTimeField(null=True, blank=True)
 
     def __str__(self):
         return f"Profile for {self.user.username}"

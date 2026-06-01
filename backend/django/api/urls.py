@@ -15,5 +15,6 @@ urlpatterns = [
     path('ask-ai/', views.ask_ai, name='ask-ai'),
     path('check-update/', views.check_update, name='check-update'),
     path('tasks/infer-context/', views.infer_context, name='infer-context'),
+    path('tasks/<int:pk>/nearby-places/', views.nearby_places, name='task-nearby-places'),
     path('', include(router.urls)),
 ]

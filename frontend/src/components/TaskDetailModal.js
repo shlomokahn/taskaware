@@ -1,8 +1,14 @@
-﻿import React from 'react';
-import { Modal, View, Text, StyleSheet, TouchableOpacity, Platform, ScrollView } from 'react-native';
+﻿import React, { useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, Image, Linking, Modal, View, Text, StyleSheet, TouchableOpacity, Platform, ScrollView } from 'react-native';
 
-export default function TaskDetailModal({ visible, task, onClose, onToggle, onDelete, onEdit }) {
-    if (!task) return null;
+export default function TaskDetailModal({ visible, task, onClose, onToggle, onDelete, onEdit, token, API_BASE, currentLocation }) {
+    const [nearbyPlaces, setNearbyPlaces] = useState([]);
+    const [mapImageUrl, setMapImageUrl] = useState(null);
+    const [nearbyLoading, setNearbyLoading] = useState(false);
+    const [nearbyError, setNearbyError] = useState('');
+    const [searchInfo, setSearchInfo] = useState(null);
+
+    const taskId = task?._id || task?.id;
 
     const formatDate = (dateString) => {
         if (!dateString) return null;
@@ -13,7 +19,86 @@ export default function TaskDetailModal({ visible, task, onClose, onToggle, onDe
         return { day, time };
     };
 
+    const formatDistance = (meters) => {
+        if (meters == null) return '';
+        if (meters >= 1000) {
+            return `${(meters / 1000).toFixed(1)} km`;
+        }
+        return `${meters} m`;
+    };
+
+    const openPlace = async (place) => {
+        if (!place?.directions_url) return;
+        try {
+            await Linking.openURL(place.directions_url);
+        } catch (error) {
+            console.error('Failed to open place URL:', error);
+        }
+    };
+
+    useEffect(() => {
+        const loadNearbyPlaces = async () => {
+            if (!visible || !taskId || !API_BASE || !token) {
+                return;
+            }
+
+            setNearbyLoading(true);
+            setNearbyError('');
+            setNearbyPlaces([]);
+            setMapImageUrl(null);
+            setSearchInfo(null);
+
+            try {
+                const payload = {};
+                const latitude = currentLocation?.coords?.latitude;
+                const longitude = currentLocation?.coords?.longitude;
+
+                if (latitude != null && longitude != null) {
+                    payload.latitude = latitude;
+                    payload.longitude = longitude;
+                }
+
+                const res = await fetch(`${API_BASE}/api/tasks/${taskId}/nearby-places/`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Token ${token}`,
+                    },
+                    body: JSON.stringify(payload),
+                });
+
+                const data = await res.json();
+
+                if (!res.ok) {
+                    setNearbyError(data?.message || data?.error || 'Failed to load nearby places');
+                    return;
+                }
+
+                setNearbyPlaces(Array.isArray(data.places) ? data.places : []);
+                setMapImageUrl(data.map_image_url || null);
+                setSearchInfo({
+                    query: data.query,
+                    categoryLabel: data.category_label,
+                    radius: data.radius_m,
+                    locationSource: data.location_source,
+                    message: data.message,
+                });
+                setNearbyError(data.message || '');
+            } catch (error) {
+                console.error('Nearby places load error:', error);
+                setNearbyError('Could not load nearby places');
+            } finally {
+                setNearbyLoading(false);
+            }
+        };
+
+        loadNearbyPlaces();
+    }, [visible, taskId, API_BASE, token, currentLocation?.coords?.latitude, currentLocation?.coords?.longitude]);
+
+    if (!task) return null;
+
     const dateInfo = formatDate(task.dueDate);
+    const hasNearbyPlaces = nearbyPlaces.length > 0;
 
     return (
         <Modal transparent visible={visible} animationType="slide" onRequestClose={onClose}>
@@ -50,32 +135,78 @@ export default function TaskDetailModal({ visible, task, onClose, onToggle, onDe
                             </TouchableOpacity>
                         ) : (
                             <TouchableOpacity style={styles.dateChipEmpty} onPress={() => onEdit(task)}>
-                                    <Text style={styles.dateChipEmptyText}>+ Add a date</Text>
+                                <Text style={styles.dateChipEmptyText}>+ Add a date</Text>
                             </TouchableOpacity>
                         )}
 
-                        {/* AI locationQuery */}
-                        {task.locationQuery ? (
-                            <View style={styles.aiCard}>
-                                <View style={styles.aiCardHeader}>
-                                    <Text style={styles.aiCardIcon}>✨</Text>
-                                    <Text style={styles.aiCardLabel}>AI recommendation</Text>
-                                </View>
-                                <View style={styles.locationRow}>
-                                    <Text style={styles.locationPin}>📍</Text>
-                                    <Text style={styles.locationText}>{task.locationQuery}</Text>
-                                </View>
-
-                                <View style={styles.mapBox}>
-                                    <View style={styles.mapDot} />
-                                    <Text style={styles.mapLabel}>{task.locationQuery}</Text>
-                                </View>
-
-                                <TouchableOpacity style={styles.navBtn} activeOpacity={0.75}>
-                                    <Text style={styles.navBtnText}>🧭  Navigate there</Text>
-                                </TouchableOpacity>
+                        {/* Nearby places */}
+                        <View style={styles.aiCard}>
+                            <View style={styles.aiCardHeader}>
+                                <Text style={styles.aiCardIcon}>📍</Text>
+                                <Text style={styles.aiCardLabel}>Nearby places</Text>
                             </View>
-                        ) : null}
+
+                            <Text style={styles.aiSubtitle}>
+                                {searchInfo?.categoryLabel || task.locationQuery || 'We looked for places that can help with this task'}
+                            </Text>
+
+                            {nearbyLoading ? (
+                                <View style={styles.loadingBox}>
+                                    <ActivityIndicator size="small" color="#7C3AED" />
+                                    <Text style={styles.loadingText}>Searching around you...</Text>
+                                </View>
+                            ) : nearbyError && !hasNearbyPlaces ? (
+                                <View style={styles.emptyMapBox}>
+                                    <Text style={styles.emptyMapText}>{nearbyError}</Text>
+                                    <Text style={styles.emptyMapSubText}>
+                                        Sync your location in Settings if the app does not have a saved position.
+                                    </Text>
+                                </View>
+                            ) : (
+                                <>
+                                    <View style={styles.mapBox}>
+                                        {mapImageUrl ? (
+                                            <Image source={{ uri: mapImageUrl }} style={styles.mapImage} resizeMode="cover" />
+                                        ) : (
+                                            <View style={styles.mapFallback}>
+                                                <Text style={styles.mapFallbackText}>Map preview unavailable</Text>
+                                            </View>
+                                        )}
+                                    </View>
+
+                                    {searchInfo?.locationSource ? (
+                                        <Text style={styles.metaText}>
+                                            Using {searchInfo.locationSource.replace(/_/g, ' ')}{searchInfo.radius ? ` • radius ${searchInfo.radius}m` : ''}
+                                        </Text>
+                                    ) : null}
+
+                                    {hasNearbyPlaces ? (
+                                        <View style={styles.placesList}>
+                                            {nearbyPlaces.map((place, index) => (
+                                                <TouchableOpacity
+                                                    key={`${place.name}-${place.lat}-${place.lng}-${index}`}
+                                                    style={styles.placeItem}
+                                                    activeOpacity={0.75}
+                                                    onPress={() => openPlace(place)}
+                                                >
+                                                    <View style={styles.placeRank}>
+                                                        <Text style={styles.placeRankText}>{index + 1}</Text>
+                                                    </View>
+                                                    <View style={styles.placeTextWrap}>
+                                                        <Text style={styles.placeName} numberOfLines={1}>{place.name}</Text>
+                                                        {!!place.address && <Text style={styles.placeAddress} numberOfLines={2}>{place.address}</Text>}
+                                                        <Text style={styles.placeMeta}>
+                                                            {place.category ? `${place.category} • ` : ''}{formatDistance(place.distance_m)} away
+                                                        </Text>
+                                                    </View>
+                                                    <Text style={styles.openIcon}>↗</Text>
+                                                </TouchableOpacity>
+                                            ))}
+                                        </View>
+                                    ) : null}
+                                </>
+                            )}
+                        </View>
 
                         {/* action */}
                         <View style={styles.iconRow}>
@@ -222,7 +353,7 @@ const styles = StyleSheet.create({
         flexDirection: 'row-reverse',
         alignItems: 'center',
         gap: 6,
-        marginBottom: 10,
+        marginBottom: 6,
     },
     aiCardIcon: { fontSize: 16 },
     aiCardLabel: {
@@ -231,50 +362,120 @@ const styles = StyleSheet.create({
         color: PURPLE,
         letterSpacing: 0.5,
     },
-    locationRow: {
-        flexDirection: 'row-reverse',
-        alignItems: 'center',
-        gap: 8,
+    aiSubtitle: {
+        fontSize: 13,
+        color: '#6B7280',
         marginBottom: 12,
-    },
-    locationPin: { fontSize: 20 },
-    locationText: {
-        fontSize: 16,
-        fontWeight: '700',
-        color: '#1F2937',
         textAlign: 'right',
-        flex: 1,
+    },
+    loadingBox: {
+        backgroundColor: '#fff',
+        borderRadius: 14,
+        paddingVertical: 18,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginBottom: 8,
+    },
+    loadingText: {
+        marginTop: 8,
+        color: '#6B7280',
+        fontWeight: '600',
+    },
+    emptyMapBox: {
+        backgroundColor: '#fff',
+        borderRadius: 14,
+        padding: 16,
+        alignItems: 'center',
+        marginBottom: 8,
+    },
+    emptyMapText: {
+        fontSize: 14,
+        color: '#111827',
+        fontWeight: '700',
+        textAlign: 'center',
+        marginBottom: 6,
+    },
+    emptyMapSubText: {
+        fontSize: 12,
+        color: '#6B7280',
+        textAlign: 'center',
     },
     mapBox: {
-        height: 100,
+        minHeight: 180,
         backgroundColor: '#EDE9FE',
-        borderRadius: 12,
+        borderRadius: 14,
+        overflow: 'hidden',
+        marginBottom: 10,
+    },
+    mapImage: {
+        width: '100%',
+        height: 180,
+        backgroundColor: '#EDE9FE',
+    },
+    mapFallback: {
+        minHeight: 180,
         justifyContent: 'center',
         alignItems: 'center',
-        marginBottom: 12,
-        gap: 6,
     },
-    mapDot: {
-        width: 16,
-        height: 16,
-        borderRadius: 8,
-        backgroundColor: PURPLE,
-        borderWidth: 3,
-        borderColor: '#fff',
-        shadowColor: PURPLE,
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.5,
-        shadowRadius: 4,
-        elevation: 4,
+    mapFallbackText: { color: '#7C3AED', fontWeight: '700' },
+    metaText: {
+        fontSize: 12,
+        color: '#6B7280',
+        marginBottom: 10,
     },
-    mapLabel: { fontSize: 12, color: PURPLE, fontWeight: '600' },
-    navBtn: {
-        backgroundColor: PURPLE,
-        borderRadius: 12,
-        paddingVertical: 11,
+    placesList: {
+        gap: 10,
+    },
+    placeItem: {
+        flexDirection: 'row-reverse',
         alignItems: 'center',
+        gap: 10,
+        backgroundColor: '#fff',
+        borderRadius: 14,
+        padding: 12,
+        borderWidth: 1,
+        borderColor: '#E5E7EB',
     },
-    navBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
+    placeRank: {
+        width: 30,
+        height: 30,
+        borderRadius: 15,
+        backgroundColor: '#F3E8FF',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    placeRankText: {
+        color: PURPLE,
+        fontWeight: '800',
+        fontSize: 12,
+    },
+    placeTextWrap: {
+        flex: 1,
+    },
+    placeName: {
+        fontSize: 15,
+        fontWeight: '800',
+        color: '#111827',
+        textAlign: 'right',
+    },
+    placeAddress: {
+        fontSize: 12,
+        color: '#6B7280',
+        textAlign: 'right',
+        marginTop: 2,
+    },
+    placeMeta: {
+        fontSize: 11,
+        color: '#7C3AED',
+        marginTop: 4,
+        textAlign: 'right',
+        fontWeight: '600',
+    },
+    openIcon: {
+        fontSize: 18,
+        color: '#7C3AED',
+        fontWeight: '800',
+    },
 
     iconRow: {
         flexDirection: 'row',

@@ -382,6 +382,9 @@ export default function App() {
             <TaskDetailModal
                 visible={!!selectedTask}
                 task={selectedTask}
+                token={token}
+                API_BASE={API_BASE}
+                currentLocation={location}
                 onClose={() => setSelectedTask(null)}
                 onToggle={async (task) => {
                     const newStatus = !task.isCompleted;
