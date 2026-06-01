@@ -15,8 +15,8 @@
     },
     "production": {
       "autoIncrement": true,
-      "distribution": "internal",
-      "channel": "main"
+      "distribution": "store",
+      "buildType": "app-bundle" 
     }
   },
   "submit": {
