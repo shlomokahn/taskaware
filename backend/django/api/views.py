@@ -1,4 +1,4 @@
-﻿from rest_framework import viewsets, status
+﻿from rest_framework import status, viewsets
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
@@ -19,23 +19,28 @@ import urllib.parse
 import urllib.request
 
 
-def send_expo_push_notification(expo_token, title, body):
-    try:
-        if not expo_token or not expo_token.startswith("ExponentPushToken"):
-            print(f"Invalid token: {expo_token}")
-            return
+GOOGLE_PLACES_API_KEY = (
+    os.environ.get("GOOGLE_PLASE")
+    or os.environ.get("GOOGLE_PLACES")
+    or os.environ.get("GOOGLE_MAPS_API_KEY")
+)
 
-        response = PushClient().publish(
-            PushMessage(
-                to=expo_token,
-                title=title,
-                body=body,
-                sound="default"
-            )
-        )
-        print("Push sent successfully!", response)
-    except Exception as e:
-        print("Failed to send push notification:", str(e))
+GOOGLE_PLACE_CATALOG = {
+    "supermarket": {"label": "Supermarket", "type": "supermarket", "keyword": "supermarket"},
+    "pharmacy": {"label": "Pharmacy", "type": "pharmacy", "keyword": "pharmacy"},
+    "post_office": {"label": "Post office", "type": "post_office", "keyword": "post office"},
+    "bank": {"label": "Bank", "type": "bank", "keyword": "bank"},
+    "atm": {"label": "ATM", "type": "atm", "keyword": "atm"},
+    "cafe": {"label": "Cafe", "type": "cafe", "keyword": "cafe"},
+    "restaurant": {"label": "Restaurant", "type": "restaurant", "keyword": "restaurant"},
+    "gym": {"label": "Gym", "type": "gym", "keyword": "gym"},
+    "bakery": {"label": "Bakery", "type": "bakery", "keyword": "bakery"},
+    "hardware_store": {"label": "Hardware store", "type": "hardware_store", "keyword": "hardware store"},
+    "electronics_store": {"label": "Electronics store", "type": None, "keyword": "electronics store"},
+    "library": {"label": "Library", "type": "library", "keyword": "library"},
+    "print_shop": {"label": "Print shop", "type": None, "keyword": "print shop"},
+    "park": {"label": "Park", "type": "park", "keyword": "park"},
+}
 
 
 TASK_PLACE_HINTS = {
@@ -59,69 +64,24 @@ TASK_PLACE_HINTS = {
     "הדפס": "print_shop",
 }
 
-PLACE_CATALOG = {
-    "supermarket": {
-        "label": "Supermarket",
-        "tags": [("shop", "supermarket"), ("shop", "grocery"), ("shop", "convenience")],
-    },
-    "pharmacy": {
-        "label": "Pharmacy",
-        "tags": [("amenity", "pharmacy"), ("shop", "chemist")],
-    },
-    "post_office": {
-        "label": "Post office",
-        "tags": [("amenity", "post_office")],
-    },
-    "bank": {
-        "label": "Bank",
-        "tags": [("amenity", "bank")],
-    },
-    "atm": {
-        "label": "ATM",
-        "tags": [("amenity", "atm")],
-    },
-    "cafe": {
-        "label": "Cafe",
-        "tags": [("amenity", "cafe")],
-    },
-    "restaurant": {
-        "label": "Restaurant",
-        "tags": [("amenity", "restaurant"), ("amenity", "fast_food")],
-    },
-    "gym": {
-        "label": "Gym",
-        "tags": [("leisure", "fitness_centre"), ("sport", "fitness"), ("leisure", "sports_centre")],
-    },
-    "bakery": {
-        "label": "Bakery",
-        "tags": [("shop", "bakery")],
-    },
-    "hardware_store": {
-        "label": "Hardware store",
-        "tags": [("shop", "hardware")],
-    },
-    "electronics_store": {
-        "label": "Electronics store",
-        "tags": [("shop", "electronics")],
-    },
-    "library": {
-        "label": "Library",
-        "tags": [("amenity", "library")],
-    },
-    "print_shop": {
-        "label": "Print shop",
-        "tags": [("shop", "copyshop"), ("shop", "printing")],
-    },
-    "park": {
-        "label": "Park",
-        "tags": [("leisure", "park")],
-    },
-}
 
-OVERPASS_ENDPOINTS = [
-    "https://overpass-api.de/api/interpreter",
-    "https://overpass.kumi.systems/api/interpreter",
-]
+def send_expo_push_notification(expo_token, title, body):
+    try:
+        if not expo_token or not expo_token.startswith("ExponentPushToken"):
+            print(f"Invalid token: {expo_token}")
+            return
+
+        response = PushClient().publish(
+            PushMessage(
+                to=expo_token,
+                title=title,
+                body=body,
+                sound="default"
+            )
+        )
+        print("Push sent successfully!", response)
+    except Exception as e:
+        print("Failed to send push notification:", str(e))
 
 
 def normalize_text(value):
@@ -138,9 +98,10 @@ def infer_task_place_query(title):
     return None
 
 
-def resolve_place_catalog(query):
+def resolve_google_place_config(query):
     normalized = normalize_text(query).replace(" ", "_")
-    for key, config in PLACE_CATALOG.items():
+
+    for key, config in GOOGLE_PLACE_CATALOG.items():
         aliases = {key, key.replace("_", "")}
         if key == "supermarket":
             aliases.update({"grocery", "grocer", "market", "convenience"})
@@ -172,154 +133,89 @@ def haversine_distance_m(lat1, lng1, lat2, lng2):
     return radius_m * (2 * math.atan2(math.sqrt(a), math.sqrt(1 - a)))
 
 
-def build_overpass_query(tags, lat, lng, radius_m):
-    parts = []
-    for key, value in tags:
-        for element_type in ("node", "way", "relation"):
-            parts.append(f'{element_type}(around:{radius_m},{lat},{lng})["{key}"="{value}"];')
+def google_places_search(query, user_lat, user_lng, radius_m):
+    if not GOOGLE_PLACES_API_KEY:
+        raise RuntimeError("Missing GOOGLE_PLASE environment variable")
 
-    return "[out:json][timeout:25];(" + "".join(parts) + ");out center;"
+    category_key, category = resolve_google_place_config(query)
+    keyword = category["keyword"] if category else query
+    place_type = category["type"] if category else None
 
+    params = {
+        "location": f"{user_lat},{user_lng}",
+        "radius": str(radius_m),
+        "keyword": keyword,
+        "key": GOOGLE_PLACES_API_KEY,
+    }
+    if place_type:
+        params["type"] = place_type
 
-def fetch_overpass_payload(query):
-    last_error = None
-    data = urllib.parse.urlencode({"data": query}).encode("utf-8")
-    headers = {"Content-Type": "application/x-www-form-urlencoded; charset=utf-8"}
+    url = "https://maps.googleapis.com/maps/api/place/nearbysearch/json?" + urllib.parse.urlencode(params)
+    request = urllib.request.Request(url)
+    with urllib.request.urlopen(request, timeout=25) as response:
+        payload = json.loads(response.read().decode("utf-8"))
 
-    for endpoint in OVERPASS_ENDPOINTS:
-        try:
-            request = urllib.request.Request(endpoint, data=data, headers=headers)
-            with urllib.request.urlopen(request, timeout=25) as response:
-                return json.loads(response.read().decode("utf-8"))
-        except Exception as error:
-            last_error = error
+    if payload.get("status") not in ("OK", "ZERO_RESULTS"):
+        raise RuntimeError(payload.get("error_message") or payload.get("status") or "Google Places request failed")
+
+    results = []
+    for place in payload.get("results", []):
+        geometry = place.get("geometry", {}).get("location", {})
+        place_lat = geometry.get("lat")
+        place_lng = geometry.get("lng")
+        if place_lat is None or place_lng is None:
             continue
 
-    raise last_error or RuntimeError("Overpass request failed")
+        distance_m = haversine_distance_m(user_lat, user_lng, float(place_lat), float(place_lng))
+        address = place.get("vicinity") or place.get("formatted_address") or ""
 
+        results.append({
+            "name": place.get("name") or category["label"] if category else keyword,
+            "address": address,
+            "category": category_key or place.get("types", [None])[0],
+            "lat": float(place_lat),
+            "lng": float(place_lng),
+            "distance_m": round(distance_m),
+            "rating": place.get("rating"),
+            "user_ratings_total": place.get("user_ratings_total"),
+            "place_id": place.get("place_id"),
+            "maps_url": f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote_plus(place.get('name') or keyword)}&query_place_id={place.get('place_id') or ''}",
+            "directions_url": (
+                "https://www.google.com/maps/dir/?api=1"
+                f"&origin={user_lat},{user_lng}"
+                f"&destination={place_lat},{place_lng}"
+                "&travelmode=walking"
+            ),
+        })
 
-def build_place_address(tags):
-    parts = []
-    street = tags.get("addr:street")
-    house = tags.get("addr:housenumber")
-    city = tags.get("addr:city")
-    postcode = tags.get("addr:postcode")
-
-    if street:
-        street_line = street
-        if house:
-            street_line = f"{street_line} {house}"
-        parts.append(street_line)
-    if city:
-        parts.append(city)
-    if postcode:
-        parts.append(postcode)
-
-    return ", ".join(parts)
-
-
-def build_osm_place_url(lat, lng):
-    return f"https://www.openstreetmap.org/?mlat={lat}&mlon={lng}#map=18/{lat}/{lng}"
-
-
-def build_directions_url(user_lat, user_lng, place_lat, place_lng):
-    return (
-        "https://www.google.com/maps/dir/?api=1"
-        f"&origin={user_lat},{user_lng}"
-        f"&destination={place_lat},{place_lng}"
-        "&travelmode=walking"
-    )
+    results.sort(key=lambda item: item["distance_m"])
+    return {
+        "query": query,
+        "category_key": category_key,
+        "category_label": category["label"] if category else keyword,
+        "places": results[:8],
+        "radius_m": radius_m,
+    }
 
 
 def build_static_map_url(center_lat, center_lng, places):
+    if not GOOGLE_PLACES_API_KEY:
+        return None
+
     params = [
         ("center", f"{center_lat},{center_lng}"),
         ("zoom", "15"),
         ("size", "640x360"),
-        ("markers", f"{center_lat},{center_lng},blue-pushpin"),
+        ("scale", "2"),
+        ("maptype", "roadmap"),
+        ("markers", f"color:blue|label:U|{center_lat},{center_lng}"),
+        ("key", GOOGLE_PLACES_API_KEY),
     ]
 
     for place in places[:8]:
-        params.append(("markers", f"{place['lat']},{place['lng']},red-pushpin"))
+        params.append(("markers", f"color:red|{place['lat']},{place['lng']}"))
 
-    return f"https://staticmap.openstreetmap.de/staticmap.php?{urllib.parse.urlencode(params, doseq=True)}"
-
-
-def extract_places(payload, category_key, category_label, user_lat, user_lng):
-    results = []
-    seen = set()
-
-    for element in payload.get("elements", []):
-        tags = element.get("tags") or {}
-        place_lat = element.get("lat")
-        place_lng = element.get("lon")
-
-        center = element.get("center") or {}
-        if place_lat is None:
-            place_lat = center.get("lat")
-        if place_lng is None:
-            place_lng = center.get("lon")
-
-        if place_lat is None or place_lng is None:
-            continue
-
-        place_lat = float(place_lat)
-        place_lng = float(place_lng)
-        place_name = tags.get("name") or tags.get("brand") or category_label
-        place_address = build_place_address(tags)
-        place_type = tags.get("amenity") or tags.get("shop") or tags.get("leisure") or category_key
-        dedupe_key = (round(place_lat, 6), round(place_lng, 6), place_name.lower())
-        if dedupe_key in seen:
-            continue
-        seen.add(dedupe_key)
-
-        distance_m = haversine_distance_m(user_lat, user_lng, place_lat, place_lng)
-        results.append({
-            "name": place_name,
-            "address": place_address,
-            "category": place_type,
-            "lat": place_lat,
-            "lng": place_lng,
-            "distance_m": round(distance_m),
-            "osm_url": build_osm_place_url(place_lat, place_lng),
-            "directions_url": build_directions_url(user_lat, user_lng, place_lat, place_lng),
-        })
-
-    results.sort(key=lambda item: item["distance_m"])
-    return results[:8]
-
-
-def search_nearby_places(query, user_lat, user_lng):
-    category_key, category = resolve_place_catalog(query)
-    if not category_key:
-        return {
-            "query": query,
-            "category_key": None,
-            "category_label": query,
-            "places": [],
-            "radius_m": None,
-        }
-
-    for radius_m in (1500, 3500, 6000):
-        overpass_query = build_overpass_query(category["tags"], user_lat, user_lng, radius_m)
-        payload = fetch_overpass_payload(overpass_query)
-        places = extract_places(payload, category_key, category["label"], user_lat, user_lng)
-        if places:
-            return {
-                "query": query,
-                "category_key": category_key,
-                "category_label": category["label"],
-                "places": places,
-                "radius_m": radius_m,
-            }
-
-    return {
-        "query": query,
-        "category_key": category_key,
-        "category_label": category["label"],
-        "places": [],
-        "radius_m": 6000,
-    }
+    return "https://maps.googleapis.com/maps/api/staticmap?" + urllib.parse.urlencode(params, doseq=True)
 
 
 def resolve_user_location(user, request_data):
@@ -561,8 +457,16 @@ def nearby_places(request, pk):
         }, status=status.HTTP_400_BAD_REQUEST)
 
     try:
-        place_results = search_nearby_places(location_query, user_lat, user_lng)
-        places = place_results["places"]
+        search_result = None
+        for radius_m in (1200, 2500, 5000):
+            search_result = google_places_search(location_query, user_lat, user_lng, radius_m)
+            if search_result["places"]:
+                break
+
+        places = search_result["places"] if search_result else []
+        category_key = search_result["category_key"] if search_result else None
+        category_label = search_result["category_label"] if search_result else location_query
+        radius_m = search_result["radius_m"] if search_result else None
     except Exception as error:
         print("Nearby places error:", str(error))
         return Response({
@@ -582,16 +486,16 @@ def nearby_places(request, pk):
 
     return Response({
         "query": location_query,
-        "category_key": place_results["category_key"],
-        "category_label": place_results["category_label"],
+        "category_key": category_key,
+        "category_label": category_label,
         "location_source": location_source,
         "user_location": {
             "lat": user_lat,
             "lng": user_lng,
         },
         "places": places,
-        "radius_m": place_results["radius_m"],
-        "map_image_url": build_static_map_url(user_lat, user_lng, places) if places else build_static_map_url(user_lat, user_lng, []),
+        "radius_m": radius_m,
+        "map_image_url": build_static_map_url(user_lat, user_lng, places),
         "message": None if places else "No nearby places were found for this task.",
     })
 

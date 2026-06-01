@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useMemo, useState } from 'react';
+﻿import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Image, Linking, Modal, View, Text, StyleSheet, TouchableOpacity, Platform, ScrollView } from 'react-native';
 
 export default function TaskDetailModal({ visible, task, onClose, onToggle, onDelete, onEdit, token, API_BASE, currentLocation }) {
@@ -28,9 +28,9 @@ export default function TaskDetailModal({ visible, task, onClose, onToggle, onDe
     };
 
     const openPlace = async (place) => {
-        if (!place?.directions_url) return;
+        if (!place?.directions_url && !place?.maps_url) return;
         try {
-            await Linking.openURL(place.directions_url);
+            await Linking.openURL(place.directions_url || place.maps_url);
         } catch (error) {
             console.error('Failed to open place URL:', error);
         }
