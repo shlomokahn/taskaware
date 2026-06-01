@@ -335,6 +335,29 @@ class UserContextViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
 
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        validated = serializer.validated_data
+        context_key = validated.get('key')
+        defaults = {
+            'value': validated.get('value'),
+            'coords_lat': validated.get('coords_lat'),
+            'coords_lng': validated.get('coords_lng'),
+            'metadata': validated.get('metadata'),
+            'confidence': validated.get('confidence', 1.0),
+            'source': validated.get('source', 'user'),
+        }
+
+        context, _ = UserContext.objects.update_or_create(
+            user=request.user,
+            key=context_key,
+            defaults=defaults,
+        )
+        output = self.get_serializer(context)
+        return Response(output.data, status=status.HTTP_200_OK)
+
 
 # --- AI Logic ---
 

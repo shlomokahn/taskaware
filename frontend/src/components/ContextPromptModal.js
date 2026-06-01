@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+﻿import React, { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 export default function ContextPromptModal({ visible, contextLabel, onSave, onSkip, API_BASE }) {
@@ -127,7 +127,7 @@ export default function ContextPromptModal({ visible, contextLabel, onSave, onSk
                                 <Text style={styles.selectedTitle}>Selected place</Text>
                                 <Text style={styles.selectedText} numberOfLines={2}>{selectedPlace.value}</Text>
                                 <Text style={styles.selectedCoords}>
-                                    ?? {parseFloat(selectedPlace.coords_lat).toFixed(6)}, {parseFloat(selectedPlace.coords_lng).toFixed(6)}
+                                    📌 {parseFloat(selectedPlace.coords_lat).toFixed(6)}, {parseFloat(selectedPlace.coords_lng).toFixed(6)}
                                 </Text>
                             </View>
                         ) : null}
