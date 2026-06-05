@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Task, AppVersion, UserContext
+from .models import Task, AppVersion, UserContext, UserProfile
 from django.contrib.auth.models import User
 
 
@@ -45,3 +45,16 @@ class UserContextSerializer(serializers.ModelSerializer):
     class Meta:
         model = UserContext
         fields = ['id', 'key', 'value', 'coords_lat', 'coords_lng', 'metadata', 'confidence', 'source', 'last_updated']
+
+
+class UserProfileSerializer(serializers.ModelSerializer):
+    notificationsEnabled = serializers.BooleanField(source='notifications_enabled', required=False)
+    dndEnabled = serializers.BooleanField(source='dnd_enabled', required=False)
+    dndStart = serializers.CharField(source='dnd_start', required=False)
+    dndEnd = serializers.CharField(source='dnd_end', required=False)
+    notificationRadius = serializers.IntegerField(source='notification_radius', required=False)
+    mutedContexts = serializers.JSONField(source='muted_contexts', required=False)
+
+    class Meta:
+        model = UserProfile
+        fields = ['notificationsEnabled', 'dndEnabled', 'dndStart', 'dndEnd', 'notificationRadius', 'mutedContexts']

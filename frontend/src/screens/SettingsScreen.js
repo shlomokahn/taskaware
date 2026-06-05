@@ -1,8 +1,8 @@
-﻿import React, { useState } from 'react';
+import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from 'react-native';
 import * as Updates from 'expo-updates';
 
-export default function SettingsScreen({ username, handleLogout, handleLocationSync, isSyncing, onOpenContextManager }) {
+export default function SettingsScreen({ username, handleLogout, handleLocationSync, isSyncing, onOpenContextManager, onOpenNotificationSettings }) {
     const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
     const [expandedPrivacy, setExpandedPrivacy] = useState(false);
 
@@ -48,7 +48,7 @@ export default function SettingsScreen({ username, handleLogout, handleLocationS
             </View>
 
             <View style={styles.settingsList}>
-                <TouchableOpacity style={styles.settingsItem}>
+                <TouchableOpacity style={styles.settingsItem} onPress={onOpenNotificationSettings}>
                     <Text style={styles.settingsItemText}>🔔 Manage notifications</Text>
                 </TouchableOpacity>
 

@@ -18,5 +18,6 @@ urlpatterns = [
     path('tasks/<int:pk>/nearby-places/', views.nearby_places, name='task-nearby-places'),
     path('google-places/autocomplete/', views.google_places_autocomplete, name='google-places-autocomplete'),
     path('google-places/details/', views.google_place_details, name='google-place-details'),
+    path('profile/settings/', views.profile_settings, name='profile-settings'),
     path('', include(router.urls)),
 ]

@@ -7,7 +7,7 @@ from django.contrib.auth import authenticate
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from .models import Task, UserProfile, AppVersion, UserContext, UserContextVisit
-from .serializers import TaskSerializer, UserSerializer, AppVersionSerializer, UserContextSerializer
+from .serializers import TaskSerializer, UserSerializer, AppVersionSerializer, UserContextSerializer, UserProfileSerializer
 import datetime
 from exponent_server_sdk import PushClient, PushMessage
 from google import genai
@@ -306,6 +306,30 @@ def is_time_before_range(hours_str):
 
 
 def evaluate_conditional_notifications(user, user_lat, user_lng):
+    profile, _ = UserProfile.objects.get_or_create(user=user)
+    if not profile.notifications_enabled:
+        print(f"Notifications disabled for {user.username}")
+        return
+
+    # Check Do Not Disturb (DND)
+    if profile.dnd_enabled and profile.dnd_start and profile.dnd_end:
+        try:
+            dnd_start_time = datetime.datetime.strptime(profile.dnd_start, "%H:%M").time()
+            dnd_end_time = datetime.datetime.strptime(profile.dnd_end, "%H:%M").time()
+            now_time = timezone.localtime(timezone.now()).time()
+            
+            in_dnd = False
+            if dnd_start_time <= dnd_end_time:
+                in_dnd = dnd_start_time <= now_time <= dnd_end_time
+            else: # Overnight
+                in_dnd = now_time >= dnd_start_time or now_time <= dnd_end_time
+                
+            if in_dnd:
+                print(f"Skipping notification due to DND: {now_time}")
+                return
+        except Exception as dnd_err:
+            print("Error evaluating DND settings:", str(dnd_err))
+
     # Update daily visits to saved contexts if user is within 200m
     contexts = UserContext.objects.filter(user=user, coords_lat__isnull=False, coords_lng__isnull=False)
     today = timezone.now().date()
@@ -331,6 +355,10 @@ def evaluate_conditional_notifications(user, user_lat, user_lng):
     for task in pending_tasks:
         context_key = task.required_context
         condition = task.context_condition
+        
+        # Check if context is muted in user preferences
+        if profile.muted_contexts and context_key in profile.muted_contexts:
+            continue
         
         user_context = UserContext.objects.filter(user=user, key=context_key).first()
         if not user_context or not user_context.coords_lat:
@@ -380,45 +408,39 @@ def evaluate_conditional_notifications(user, user_lat, user_lng):
             # API Cost Optimization: Cache results rounded to 3 decimal places (~100m)
             rounded_lat = round(user_lat, 3)
             rounded_lng = round(user_lng, 3)
+            radius_m = profile.notification_radius or 300
             
             search_result = None
             try:
                 from django.core.cache import cache
-                cache_key = f"places:{rounded_lat}:{rounded_lng}:{task.locationQuery}"
+                cache_key = f"places:{rounded_lat}:{rounded_lng}:{task.locationQuery}:{radius_m}"
                 search_result = cache.get(cache_key)
                 if not search_result:
-                    search_result = google_places_search(task.locationQuery, user_lat, user_lng, radius_m=300)
+                    search_result = google_places_search(task.locationQuery, user_lat, user_lng, radius_m=radius_m)
                     cache.set(cache_key, search_result, 3600)
             except Exception as cache_err:
                 print("Cache/Places error in evaluation:", str(cache_err))
                 try:
-                    search_result = google_places_search(task.locationQuery, user_lat, user_lng, radius_m=300)
+                    search_result = google_places_search(task.locationQuery, user_lat, user_lng, radius_m=radius_m)
                 except Exception:
                     search_result = None
 
             if search_result and search_result.get("places"):
                 nearest_place = search_result["places"][0]
                 
-                profile = UserProfile.objects.filter(user=user).first()
-                if profile and profile.expo_push_token:
+                if profile.expo_push_token:
                     context_label = dict(UserContext.ContextKey.choices).get(context_key, context_key)
-                    context_translation = {
-                        'work': 'העבודה',
-                        'home': 'הבית',
-                        'school': 'הלימודים',
-                        'gym': 'חדר הכושר'
-                    }
-                    context_hebrew = context_translation.get(context_key, context_label)
+                    context_name = context_label.lower()
                     
-                    body_message = f"מכיוון שסיימת ב{context_hebrew}, יש {nearest_place['name']} קרוב ({nearest_place['address']}). אל תשכח: '{task.title}'"
+                    body_message = f"Since you finished at {context_name}, there is a {nearest_place['name']} nearby ({nearest_place['address']}). Don't forget: '{task.title}'"
                     if condition == 'during':
-                        body_message = f"בזמן שאתה ב{context_hebrew}, יש {nearest_place['name']} קרוב. אל תשכח: '{task.title}'"
+                        body_message = f"While you are at {context_name}, there is a {nearest_place['name']} nearby. Don't forget: '{task.title}'"
                     elif condition == 'before':
-                        body_message = f"לפני שאתה מתחיל ב{context_hebrew}, יש {nearest_place['name']} קרוב. אל תשכח: '{task.title}'"
+                        body_message = f"Before you start at {context_name}, there is a {nearest_place['name']} nearby. Don't forget: '{task.title}'"
                     
                     send_expo_push_notification(
                         expo_token=profile.expo_push_token,
-                        title="📍 משימה קרובה לביצוע!",
+                        title="📍 Task location nearby!",
                         body=body_message
                     )
                     
@@ -468,6 +490,21 @@ def save_push_token(request):
     profile.save()
 
     return Response({"message": "Token saved successfully"}, status=status.HTTP_200_OK)
+
+
+@api_view(['GET', 'PATCH'])
+@permission_classes([IsAuthenticated])
+def profile_settings(request):
+    profile, _ = UserProfile.objects.get_or_create(user=request.user)
+    if request.method == 'GET':
+        serializer = UserProfileSerializer(profile)
+        return Response(serializer.data)
+    elif request.method == 'PATCH':
+        serializer = UserProfileSerializer(profile, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 # --- Tasks CRUD ---

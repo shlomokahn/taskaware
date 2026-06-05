@@ -57,6 +57,7 @@ import TaskDetailModal from './src/components/TaskDetailModal';
 import EditTask from './src/EditTask';
 import UpdateChecker from './src/components/UpdateChecker';
 import ContextPromptModal from './src/components/ContextPromptModal';
+import NotificationSettingsScreen from './src/screens/NotificationSettingsScreen';
 
 import * as Device from 'expo-device';
 import Constants from 'expo-constants';
@@ -85,6 +86,7 @@ export default function App() {
 
     const [activeTab, setActiveTab] = useState('home');
     const [showContextManager, setShowContextManager] = useState(false);
+    const [showNotificationSettings, setShowNotificationSettings] = useState(false);
 
     const [creating, setCreating] = useState(false);
     const [selectedTask, setSelectedTask] = useState(null);
@@ -408,23 +410,38 @@ export default function App() {
         />
     );
 
-    const renderSettingsScreen = () => (
-        showContextManager ? (
-            <UserContextScreen
-                token={token}
-                API_BASE={API_BASE}
-                onClose={() => setShowContextManager(false)}
-            />
-        ) : (
+    const renderSettingsScreen = () => {
+        if (showContextManager) {
+            return (
+                <UserContextScreen
+                    token={token}
+                    API_BASE={API_BASE}
+                    onClose={() => setShowContextManager(false)}
+                />
+            );
+        }
+        if (showNotificationSettings) {
+            return (
+                <NotificationSettingsScreen
+                    token={token}
+                    API_BASE={API_BASE}
+                    tasks={tasks}
+                    onUpdateTask={handleUpdateTask}
+                    onClose={() => setShowNotificationSettings(false)}
+                />
+            );
+        }
+        return (
             <SettingsScreen
                 username={username}
                 handleLogout={handleLogout}
                 handleLocationSync={handleLocationSync}
                 isSyncing={isSyncing}
                 onOpenContextManager={() => setShowContextManager(true)}
+                onOpenNotificationSettings={() => setShowNotificationSettings(true)}
             />
-        )
-    );
+        );
+    };
 
     return (
         <SafeAreaView style={styles.container}>

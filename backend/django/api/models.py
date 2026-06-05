@@ -64,6 +64,13 @@ class UserProfile(models.Model):
     coords_lng = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     location_updated_at = models.DateTimeField(null=True, blank=True)
 
+    notifications_enabled = models.BooleanField(default=True)
+    dnd_enabled = models.BooleanField(default=False)
+    dnd_start = models.CharField(max_length=5, default="22:00")
+    dnd_end = models.CharField(max_length=5, default="07:00")
+    notification_radius = models.IntegerField(default=300)
+    muted_contexts = models.JSONField(default=list, blank=True)
+
     def __str__(self):
         return f"Profile for {self.user.username}"
 
