@@ -34,7 +34,15 @@ class TaskSerializer(serializers.ModelSerializer):
 
         obj._closest_place_data = None
         
-        if not obj.locationQuery:
+        location_query = obj.locationQuery
+        if not location_query:
+            try:
+                from .views import infer_task_place_query
+                location_query = infer_task_place_query(obj.title)
+            except Exception:
+                pass
+
+        if not location_query:
             return None
 
         request = self.context.get('request')
@@ -53,16 +61,11 @@ class TaskSerializer(serializers.ModelSerializer):
             rounded_lat = round(user_lat, 3)
             rounded_lng = round(user_lng, 3)
             
-            # Use default radius or user's profile radius
-            radius_m = 300
-            try:
-                profile = request.user.profile
-                if profile and profile.notification_radius:
-                    radius_m = profile.notification_radius
-            except Exception:
-                pass
+            # For proximity sorting/display, we use a wide search radius (e.g., 10,000 meters)
+            # to find the nearest actual execution place even if the user is not currently within its notification range.
+            radius_m = 10000
                 
-            query_key = obj.locationQuery.strip().lower()
+            query_key = location_query.strip().lower()
             cache_key = f"places:{rounded_lat}:{rounded_lng}:{query_key}:{radius_m}"
             
             from django.core.cache import cache
@@ -71,7 +74,7 @@ class TaskSerializer(serializers.ModelSerializer):
             if not search_result:
                 # Cache miss, import and search
                 from .views import google_places_search
-                search_result = google_places_search(obj.locationQuery, user_lat, user_lng, radius_m=radius_m)
+                search_result = google_places_search(location_query, user_lat, user_lng, radius_m=radius_m)
                 cache.set(cache_key, search_result, 3600)
                 
             if search_result and search_result.get("places"):
