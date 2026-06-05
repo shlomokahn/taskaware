@@ -352,6 +352,7 @@ def evaluate_conditional_notifications(user, user_lat, user_lng):
         is_muted=False
     ).exclude(required_context__isnull=True).exclude(required_context='')
 
+    satisfied_tasks = []
     for task in pending_tasks:
         context_key = task.required_context
         condition = task.context_condition
@@ -392,11 +393,21 @@ def evaluate_conditional_notifications(user, user_lat, user_lng):
         else:
             context_condition_met = True
 
-        if context_condition_met:
-            if not task.locationQuery:
-                continue
-                
-            # Anti-spam check: 1000m from last notification location
+        if context_condition_met and task.locationQuery:
+            satisfied_tasks.append(task)
+
+    # Group satisfied tasks by locationQuery (case-insensitive, trimmed)
+    grouped_tasks = {}
+    for task in satisfied_tasks:
+        query_key = task.locationQuery.strip().lower()
+        if query_key not in grouped_tasks:
+            grouped_tasks[query_key] = []
+        grouped_tasks[query_key].append(task)
+
+    for query_key, task_list in grouped_tasks.items():
+        # Anti-spam filter: Filter out individual tasks notified within 1000m recently
+        notify_list = []
+        for task in task_list:
             if task.last_notified_lat is not None and task.last_notified_lng is not None:
                 dist_from_last = haversine_distance_m(
                     user_lat, user_lng,
@@ -404,46 +415,65 @@ def evaluate_conditional_notifications(user, user_lat, user_lng):
                 )
                 if dist_from_last < 1000:
                     continue
+            notify_list.append(task)
 
-            # API Cost Optimization: Cache results rounded to 3 decimal places (~100m)
-            rounded_lat = round(user_lat, 3)
-            rounded_lng = round(user_lng, 3)
-            radius_m = profile.notification_radius or 300
-            
-            search_result = None
+        if not notify_list:
+            continue
+
+        # Use the location query of the first task (preserves original casing for Places Search)
+        original_query = notify_list[0].locationQuery
+        
+        # API Cost Optimization: Cache results rounded to 3 decimal places (~100m)
+        rounded_lat = round(user_lat, 3)
+        rounded_lng = round(user_lng, 3)
+        radius_m = profile.notification_radius or 300
+        
+        search_result = None
+        try:
+            from django.core.cache import cache
+            cache_key = f"places:{rounded_lat}:{rounded_lng}:{query_key}:{radius_m}"
+            search_result = cache.get(cache_key)
+            if not search_result:
+                search_result = google_places_search(original_query, user_lat, user_lng, radius_m=radius_m)
+                cache.set(cache_key, search_result, 3600)
+        except Exception as cache_err:
+            print("Cache/Places error in evaluation:", str(cache_err))
             try:
-                from django.core.cache import cache
-                cache_key = f"places:{rounded_lat}:{rounded_lng}:{task.locationQuery}:{radius_m}"
-                search_result = cache.get(cache_key)
-                if not search_result:
-                    search_result = google_places_search(task.locationQuery, user_lat, user_lng, radius_m=radius_m)
-                    cache.set(cache_key, search_result, 3600)
-            except Exception as cache_err:
-                print("Cache/Places error in evaluation:", str(cache_err))
-                try:
-                    search_result = google_places_search(task.locationQuery, user_lat, user_lng, radius_m=radius_m)
-                except Exception:
-                    search_result = None
+                search_result = google_places_search(original_query, user_lat, user_lng, radius_m=radius_m)
+            except Exception:
+                search_result = None
 
-            if search_result and search_result.get("places"):
-                nearest_place = search_result["places"][0]
-                
-                if profile.expo_push_token:
-                    context_label = dict(UserContext.ContextKey.choices).get(context_key, context_key)
-                    context_name = context_label.lower()
+        if search_result and search_result.get("places"):
+            nearest_place = search_result["places"][0]
+            
+            if profile.expo_push_token:
+                if len(notify_list) == 1:
+                    # Single task notification
+                    task = notify_list[0]
+                    context_label = dict(UserContext.ContextKey.choices).get(task.required_context, task.required_context)
+                    context_name = context_label.lower() if context_label else "location"
                     
                     body_message = f"Since you finished at {context_name}, there is a {nearest_place['name']} nearby ({nearest_place['address']}). Don't forget: '{task.title}'"
-                    if condition == 'during':
+                    if task.context_condition == 'during':
                         body_message = f"While you are at {context_name}, there is a {nearest_place['name']} nearby. Don't forget: '{task.title}'"
-                    elif condition == 'before':
+                    elif task.context_condition == 'before':
                         body_message = f"Before you start at {context_name}, there is a {nearest_place['name']} nearby. Don't forget: '{task.title}'"
                     
-                    send_expo_push_notification(
-                        expo_token=profile.expo_push_token,
-                        title="📍 Task location nearby!",
-                        body=body_message
-                    )
-                    
+                    title_message = "📍 Task location nearby!"
+                else:
+                    # Multiple tasks notification
+                    titles_str = ", ".join([f"'{t.title}'" for t in notify_list])
+                    body_message = f"You have {len(notify_list)} tasks near {nearest_place['name']} ({nearest_place['address']}): {titles_str}"
+                    title_message = f"📍 {nearest_place['name']}: {len(notify_list)} Tasks"
+                
+                send_expo_push_notification(
+                    expo_token=profile.expo_push_token,
+                    title=title_message,
+                    body=body_message
+                )
+                
+                # Update last notified positions
+                for task in notify_list:
                     task.last_notified_lat = user_lat
                     task.last_notified_lng = user_lng
                     task.save(update_fields=['last_notified_lat', 'last_notified_lng'])

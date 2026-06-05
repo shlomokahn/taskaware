@@ -326,6 +326,35 @@ export default function App() {
         }
     };
 
+    const handleToggleTaskComplete = async (task) => {
+        try {
+            const newStatus = !task.isCompleted;
+            if (newStatus && task.notificationId) {
+                await cancelNotification(task.notificationId);
+            }
+            await handleUpdateTask(task._id || task.id, { isCompleted: newStatus });
+        } catch (err) {
+            console.error('Error toggling complete:', err);
+        }
+    };
+
+    const handleDeleteTask = async (taskId, notificationId) => {
+        try {
+            if (notificationId) {
+                await cancelNotification(notificationId);
+            }
+            await fetch(`${API_BASE}/api/tasks/${taskId}/`, {
+                method: 'DELETE',
+                headers: { 'Authorization': `Token ${token}` }
+            });
+            setTasks(prev => prev.filter(t => (t._id || t.id) !== taskId));
+        } catch (err) {
+            console.error('Error deleting task:', err);
+        }
+    };
+
+
+
     const formatDisplayDate = (date) => {
         if (!date) return 'No reminder';
         const d = new Date(date);
@@ -407,6 +436,11 @@ export default function App() {
             fetchTasks={fetchTasks}
             setSelectedTask={setSelectedTask}
             formatDisplayDate={formatDisplayDate}
+            currentLocation={location}
+            token={token}
+            API_BASE={API_BASE}
+            onToggleTaskComplete={handleToggleTaskComplete}
+            onDeleteTask={handleDeleteTask}
         />
     );
 
@@ -477,15 +511,11 @@ export default function App() {
                     setSelectedTask(prev => prev ? { ...prev, isMuted: newMuteValue } : null);
                 }}
                 onToggle={async (task) => {
-                    const newStatus = !task.isCompleted;
-                    if (newStatus) await cancelNotification(task.notificationId);
-                    await handleUpdateTask(task._id || task.id, { isCompleted: newStatus });
+                    await handleToggleTaskComplete(task);
                     setSelectedTask(null);
                 }}
                 onDelete={async (id) => {
-                    if (selectedTask?.notificationId) await cancelNotification(selectedTask.notificationId);
-                    await fetch(`${API_BASE}/api/tasks/${id}/`, { method: 'DELETE', headers: { 'Authorization': `Token ${token}` } });
-                    setTasks(prev => prev.filter(t => (t._id || t.id) !== id));
+                    await handleDeleteTask(id, selectedTask?.notificationId);
                     setSelectedTask(null);
                 }}
                 onEdit={(task) => { setEditingTask(task); setSelectedTask(null); }}

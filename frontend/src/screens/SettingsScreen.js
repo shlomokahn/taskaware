@@ -43,7 +43,7 @@ export default function SettingsScreen({ username, handleLogout, handleLocationS
                 <View style={styles.avatarCircle}>
                     <Text style={styles.avatarText}>{username ? username.charAt(0).toUpperCase() : ''}</Text>
                 </View>
-                <Text style={styles.profileName}>שלום, {username}</Text>
+                <Text style={styles.profileName}>hello {username}</Text>
                 <Text style={styles.profileSub}>Your user is logged in and synchronized</Text>
             </View>
 

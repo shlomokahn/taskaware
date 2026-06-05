@@ -1,49 +1,293 @@
-﻿import React from 'react';
-import { View, Text, FlatList, TouchableOpacity, RefreshControl, StyleSheet } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, FlatList, TouchableOpacity, RefreshControl, StyleSheet, TextInput, ScrollView } from 'react-native';
+import SwipeableRow from '../components/SwipeableRow';
 
-export default function HomeScreen({ tasks, refreshing, fetchTasks, setSelectedTask, formatDisplayDate }) {
+export default function HomeScreen({ 
+    tasks, 
+    refreshing, 
+    fetchTasks, 
+    setSelectedTask, 
+    formatDisplayDate,
+    currentLocation,
+    token,
+    API_BASE,
+    onToggleTaskComplete,
+    onDeleteTask
+}) {
+    const [contexts, setContexts] = useState([]);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [sortBy, setSortBy] = useState('smart'); // 'smart', 'dueDate', 'location'
+
+    // Fetch contexts for location sorting on mount
+    const fetchContexts = async () => {
+        if (!token || !API_BASE) return;
+        try {
+            const res = await fetch(`${API_BASE}/api/user-context/`, {
+                headers: { 'Authorization': `Token ${token}` }
+            });
+            if (res.ok) {
+                const data = await res.json();
+                setContexts(data || []);
+            }
+        } catch (err) {
+            console.error('Error fetching contexts:', err);
+        }
+    };
+
+    useEffect(() => {
+        fetchContexts();
+    }, [token, API_BASE]);
+
+    // Calculate distance to task's required context
+    const getDistanceToContext = (task, userCoords, contextsList) => {
+        if (!userCoords || !task.requiredContext) return Infinity;
+        const ctx = contextsList.find(c => c.key === task.requiredContext);
+        if (!ctx || ctx.coords_lat == null || ctx.coords_lng == null) return Infinity;
+        
+        const lat1 = userCoords.latitude;
+        const lon1 = userCoords.longitude;
+        const lat2 = parseFloat(ctx.coords_lat);
+        const lon2 = parseFloat(ctx.coords_lng);
+        
+        const R = 6371000; // meters
+        const dLat = (lat2 - lat1) * Math.PI / 180;
+        const dLon = (lon2 - lon1) * Math.PI / 180;
+        const a = 
+            Math.sin(dLat/2) * Math.sin(dLat/2) +
+            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+            Math.sin(dLon/2) * Math.sin(dLon/2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+        return R * c;
+    };
+
+    // Generate label for distance to context
+    const getDistanceLabel = (task, userCoords, contextsList) => {
+        const dist = getDistanceToContext(task, userCoords, contextsList);
+        if (dist === Infinity) return '';
+        
+        const contextEmojis = {
+            'work': '💼',
+            'home': '🏠',
+            'school': '🎓',
+            'gym': '🏋️'
+        };
+        const emoji = contextEmojis[task.requiredContext] || '📍';
+        const contextCapitalized = task.requiredContext.charAt(0).toUpperCase() + task.requiredContext.slice(1);
+        
+        if (dist >= 1000) {
+            return `${emoji} ${contextCapitalized} (${(dist / 1000).toFixed(1)} km away)`;
+        }
+        return `${emoji} ${contextCapitalized} (${Math.round(dist)}m away)`;
+    };
+
+    // Filter by search query
+    const filteredTasks = tasks.filter(task => {
+        const query = searchQuery.toLowerCase().trim();
+        if (!query) return true;
+        
+        const titleMatch = task.title?.toLowerCase().includes(query);
+        const locMatch = task.locationQuery?.toLowerCase().includes(query);
+        const ctxMatch = task.requiredContext?.toLowerCase().includes(query);
+        
+        return titleMatch || locMatch || ctxMatch;
+    });
+
+    // Sort tasks
+    const sortedTasks = [...filteredTasks].sort((a, b) => {
+        // Completed tasks always go to the bottom
+        if (a.isCompleted !== b.isCompleted) {
+            return a.isCompleted ? 1 : -1;
+        }
+        
+        if (sortBy === 'dueDate') {
+            if (!a.dueDate) return 1;
+            if (!b.dueDate) return -1;
+            return new Date(a.dueDate) - new Date(b.dueDate);
+        }
+        
+        if (sortBy === 'location' && currentLocation?.coords) {
+            const distA = getDistanceToContext(a, currentLocation.coords, contexts);
+            const distB = getDistanceToContext(b, currentLocation.coords, contexts);
+            if (distA !== distB) {
+                return distA - distB;
+            }
+        }
+        
+        // Default 'smart' sort: due date soonest first, then tasks with no due date
+        if (!a.dueDate && b.dueDate) return 1;
+        if (a.dueDate && !b.dueDate) return -1;
+        if (a.dueDate && b.dueDate) {
+            return new Date(a.dueDate) - new Date(b.dueDate);
+        }
+        
+        // Fallback to creation date (newest first)
+        const dateA = a.createdAt ? new Date(a.createdAt) : new Date(0);
+        const dateB = b.createdAt ? new Date(b.createdAt) : new Date(0);
+        return dateB - dateA;
+    });
+
     return (
         <View style={{ flex: 1 }}>
             <View style={styles.header}>
                 <Text style={styles.brand}>TaskAware</Text>
             </View>
 
+            {/* Search Bar */}
+            <View style={styles.searchContainer}>
+                <Text style={styles.searchIcon}>🔍</Text>
+                <TextInput
+                    style={styles.searchInput}
+                    placeholder="Search tasks..."
+                    placeholderTextColor="#9ca3af"
+                    value={searchQuery}
+                    onChangeText={setSearchQuery}
+                />
+                {searchQuery.length > 0 && (
+                    <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.clearBtn}>
+                        <Text style={styles.clearBtnText}>✕</Text>
+                    </TouchableOpacity>
+                )}
+            </View>
+
+            {/* Sorting Chip Row */}
+            <View>
+                <ScrollView 
+                    horizontal 
+                    showsHorizontalScrollIndicator={false} 
+                    contentContainerStyle={styles.sortContainer}
+                >
+                    {[
+                        { key: 'smart', label: 'Smart 💡' },
+                        { key: 'dueDate', label: 'Due Date 📅' },
+                        { key: 'location', label: 'Proximity 📍' }
+                    ].map(option => (
+                        <TouchableOpacity
+                            key={option.key}
+                            style={[
+                                styles.sortChip,
+                                sortBy === option.key && styles.sortChipActive
+                            ]}
+                            onPress={() => setSortBy(option.key)}
+                        >
+                            <Text style={[
+                                styles.sortChipText,
+                                sortBy === option.key && styles.sortChipTextActive
+                            ]}>
+                                {option.label}
+                            </Text>
+                        </TouchableOpacity>
+                    ))}
+                </ScrollView>
+            </View>
+
             <Text style={styles.listTitle}>My Tasks</Text>
+            
             <FlatList
-                data={tasks}
-                contentContainerStyle={{ paddingBottom: 100 }}
+                data={sortedTasks}
+                contentContainerStyle={{ paddingBottom: 150 }}
                 keyExtractor={(item) => (item._id || item.id)?.toString()}
                 ListEmptyComponent={
                     <View style={styles.emptyState}>
-                        <Text style={styles.emptyStateText}>No tasks at the moment. Enjoy! 🎉</Text>
+                        <Text style={styles.emptyStateText}>
+                            {searchQuery ? 'No matching tasks found' : 'No tasks at the moment. Enjoy! 🎉'}
+                        </Text>
                     </View>
                 }
                 renderItem={({ item }) => (
-                    <TouchableOpacity
-                        style={[styles.taskRow, item.isCompleted && styles.taskRowCompleted]}
-                        onPress={() => setSelectedTask(item)}
+                    <SwipeableRow
+                        onSwipeRight={() => onToggleTaskComplete(item)}
+                        onSwipeLeft={() => onDeleteTask(item._id || item.id, item.notificationId)}
                     >
-                        <View style={styles.taskContent}>
-                            <Text style={[styles.taskTitle, item.isCompleted && styles.taskTitleCompleted]}>{item.title}</Text>
-                            <Text style={styles.taskDate}>⏰ {formatDisplayDate(item.dueDate)}</Text>
-                            {item.locationQuery && (
-                                <Text style={styles.taskLocation}>📍 Suggested location: {item.locationQuery}</Text>
-                            )}
-                        </View>
-                        <View style={[styles.statusCircle, item.isCompleted && styles.statusCircleCompleted]}>
-                            {item.isCompleted && <Text style={styles.checkMark}>✓</Text>}
-                        </View>
-                    </TouchableOpacity>
+                        <TouchableOpacity
+                            style={[styles.taskRow, item.isCompleted && styles.taskRowCompleted]}
+                            onPress={() => setSelectedTask(item)}
+                            activeOpacity={0.7}
+                        >
+                            <View style={styles.taskContent}>
+                                <Text style={[styles.taskTitle, item.isCompleted && styles.taskTitleCompleted]}>
+                                    {item.title}
+                                </Text>
+                                <Text style={styles.taskDate}>⏰ {formatDisplayDate(item.dueDate)}</Text>
+                                
+                                {/* Proximity distance display if location sort is active */}
+                                {sortBy === 'location' && currentLocation?.coords ? (
+                                    <Text style={styles.distanceText}>
+                                        {getDistanceLabel(item, currentLocation.coords, contexts)}
+                                    </Text>
+                                ) : item.locationQuery ? (
+                                    <Text style={styles.taskLocation}>📍 Suggested: {item.locationQuery}</Text>
+                                ) : null}
+                            </View>
+                            <View style={[styles.statusCircle, item.isCompleted && styles.statusCircleCompleted]}>
+                                {item.isCompleted && <Text style={styles.checkMark}>✓</Text>}
+                            </View>
+                        </TouchableOpacity>
+                    </SwipeableRow>
                 )}
-                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={fetchTasks} />}
+                refreshControl={
+                    <RefreshControl 
+                        refreshing={refreshing} 
+                        onRefresh={async () => {
+                            await fetchTasks();
+                            await fetchContexts();
+                        }} 
+                    />
+                }
             />
         </View>
     );
 }
 
 const styles = StyleSheet.create({
-    header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 25, paddingHorizontal: 20, paddingTop: 10 },
+    header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15, paddingHorizontal: 20, paddingTop: 10 },
     brand: { fontSize: 32, fontWeight: '900', color: '#111827' },
+    
+    // Search styles
+    searchContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#fff',
+        borderRadius: 14,
+        borderWidth: 1,
+        borderColor: '#e5e7eb',
+        marginHorizontal: 20,
+        marginBottom: 12,
+        paddingHorizontal: 12,
+    },
+    searchIcon: { fontSize: 16, marginRight: 8 },
+    searchInput: {
+        flex: 1,
+        fontSize: 15,
+        paddingVertical: 10,
+        color: '#1f2937',
+        textAlign: 'left',
+    },
+    clearBtn: { padding: 4 },
+    clearBtnText: { fontSize: 12, color: '#9ca3af', fontWeight: 'bold' },
+
+    // Sort styles
+    sortContainer: {
+        flexDirection: 'row',
+        paddingHorizontal: 20,
+        gap: 8,
+        marginBottom: 15,
+        paddingBottom: 4,
+    },
+    sortChip: {
+        paddingVertical: 8,
+        paddingHorizontal: 14,
+        borderRadius: 20,
+        backgroundColor: '#f3f4f6',
+        borderWidth: 1,
+        borderColor: '#e5e7eb',
+    },
+    sortChipActive: {
+        backgroundColor: '#ecfdf5',
+        borderColor: '#059669',
+    },
+    sortChipText: { fontSize: 13, fontWeight: '700', color: '#4b5563' },
+    sortChipTextActive: { color: '#059669' },
+
     listTitle: { fontSize: 20, fontWeight: '800', color: '#374151', textAlign: 'left', marginBottom: 15, paddingHorizontal: 20 },
     taskRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#fff', padding: 18, borderRadius: 20, marginBottom: 12, marginHorizontal: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 5, elevation: 2 },
     taskRowCompleted: { backgroundColor: '#f9fafb', opacity: 0.7 },
@@ -52,6 +296,7 @@ const styles = StyleSheet.create({
     taskTitleCompleted: { textDecorationLine: 'line-through', color: '#9ca3af' },
     taskDate: { fontSize: 13, color: '#6b7280', textAlign: 'left' },
     taskLocation: { fontSize: 13, color: '#8b5cf6', textAlign: 'left', fontWeight: '600', marginTop: 4 },
+    distanceText: { fontSize: 13, color: '#059669', textAlign: 'left', fontWeight: '700', marginTop: 4 },
     statusCircle: { width: 28, height: 28, borderRadius: 14, borderWidth: 2, borderColor: '#cbd5e1', justifyContent: 'center', alignItems: 'center' },
     statusCircleCompleted: { backgroundColor: '#2f855a', borderColor: '#2f855a' },
     checkMark: { color: '#fff', fontSize: 16 },
