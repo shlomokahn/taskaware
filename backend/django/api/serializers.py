@@ -14,13 +14,99 @@ class TaskSerializer(serializers.ModelSerializer):
     contextCondition = serializers.CharField(source='context_condition', required=False, allow_null=True)
     isMuted = serializers.BooleanField(source='is_muted', required=False)
 
+    closestPlaceName = serializers.SerializerMethodField()
+    closestPlaceAddress = serializers.SerializerMethodField()
+    closestPlaceCoords = serializers.SerializerMethodField()
+    closestPlaceDistance = serializers.SerializerMethodField()
+
     class Meta:
         model = Task
         fields = [
             '_id', 'title', 'isCompleted', 'createdAt', 'dueDate', 
             'notificationId', 'locationQuery', 'requiredContext', 
-            'contextCondition', 'isMuted'
+            'contextCondition', 'isMuted',
+            'closestPlaceName', 'closestPlaceAddress', 'closestPlaceCoords', 'closestPlaceDistance'
         ]
+
+    def _get_closest_place_data(self, obj):
+        if hasattr(obj, '_closest_place_data'):
+            return obj._closest_place_data
+
+        obj._closest_place_data = None
+        
+        if not obj.locationQuery:
+            return None
+
+        request = self.context.get('request')
+        if not request:
+            return None
+
+        lat_str = request.query_params.get('latitude')
+        lng_str = request.query_params.get('longitude')
+        if not lat_str or not lng_str:
+            return None
+
+        try:
+            user_lat = float(lat_str)
+            user_lng = float(lng_str)
+            
+            rounded_lat = round(user_lat, 3)
+            rounded_lng = round(user_lng, 3)
+            
+            # Use default radius or user's profile radius
+            radius_m = 300
+            try:
+                profile = request.user.profile
+                if profile and profile.notification_radius:
+                    radius_m = profile.notification_radius
+            except Exception:
+                pass
+                
+            query_key = obj.locationQuery.strip().lower()
+            cache_key = f"places:{rounded_lat}:{rounded_lng}:{query_key}:{radius_m}"
+            
+            from django.core.cache import cache
+            search_result = cache.get(cache_key)
+            
+            if not search_result:
+                # Cache miss, import and search
+                from .views import google_places_search
+                search_result = google_places_search(obj.locationQuery, user_lat, user_lng, radius_m=radius_m)
+                cache.set(cache_key, search_result, 3600)
+                
+            if search_result and search_result.get("places"):
+                nearest = search_result["places"][0]
+                
+                # Import distance helper from views
+                from .views import haversine_distance_m
+                dist = haversine_distance_m(user_lat, user_lng, float(nearest["lat"]), float(nearest["lng"]))
+                
+                obj._closest_place_data = {
+                    "name": nearest["name"],
+                    "address": nearest.get("address", ""),
+                    "coords": {"lat": nearest["lat"], "lng": nearest["lng"]},
+                    "distance": int(dist)
+                }
+        except Exception as err:
+            print("Error in TaskSerializer._get_closest_place_data:", str(err))
+
+        return obj._closest_place_data
+
+    def get_closestPlaceName(self, obj):
+        data = self._get_closest_place_data(obj)
+        return data["name"] if data else None
+
+    def get_closestPlaceAddress(self, obj):
+        data = self._get_closest_place_data(obj)
+        return data["address"] if data else None
+
+    def get_closestPlaceCoords(self, obj):
+        data = self._get_closest_place_data(obj)
+        return data["coords"] if data else None
+
+    def get_closestPlaceDistance(self, obj):
+        data = self._get_closest_place_data(obj)
+        return data["distance"] if data else None
 
 
 

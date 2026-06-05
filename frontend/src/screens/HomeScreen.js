@@ -17,6 +17,7 @@ export default function HomeScreen({
     const [contexts, setContexts] = useState([]);
     const [searchQuery, setSearchQuery] = useState('');
     const [sortBy, setSortBy] = useState('smart'); // 'smart', 'dueDate', 'location'
+    const [scrollEnabled, setScrollEnabled] = useState(true);
 
     // Fetch contexts for location sorting on mount
     const fetchContexts = async () => {
@@ -38,46 +39,81 @@ export default function HomeScreen({
         fetchContexts();
     }, [token, API_BASE]);
 
-    // Calculate distance to task's required context
-    const getDistanceToContext = (task, userCoords, contextsList) => {
-        if (!userCoords || !task.requiredContext) return Infinity;
-        const ctx = contextsList.find(c => c.key === task.requiredContext);
-        if (!ctx || ctx.coords_lat == null || ctx.coords_lng == null) return Infinity;
+    // Calculate distance to task's actual place of execution or context location
+    const getDistanceToPlace = (task, userCoords) => {
+        if (!userCoords) return Infinity;
         
-        const lat1 = userCoords.latitude;
-        const lon1 = userCoords.longitude;
-        const lat2 = parseFloat(ctx.coords_lat);
-        const lon2 = parseFloat(ctx.coords_lng);
+        // 1. Distance to actual closest place resolved by server (closestPlaceCoords)
+        if (task.closestPlaceCoords && task.closestPlaceCoords.lat != null && task.closestPlaceCoords.lng != null) {
+            const lat1 = userCoords.latitude;
+            const lon1 = userCoords.longitude;
+            const lat2 = parseFloat(task.closestPlaceCoords.lat);
+            const lon2 = parseFloat(task.closestPlaceCoords.lng);
+            
+            const R = 6371000; // meters
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLon = (lon2 - lon1) * Math.PI / 180;
+            const a = 
+                Math.sin(dLat/2) * Math.sin(dLat/2) +
+                Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+                Math.sin(dLon/2) * Math.sin(dLon/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            return R * c;
+        }
         
-        const R = 6371000; // meters
-        const dLat = (lat2 - lat1) * Math.PI / 180;
-        const dLon = (lon2 - lon1) * Math.PI / 180;
-        const a = 
-            Math.sin(dLat/2) * Math.sin(dLat/2) +
-            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
-            Math.sin(dLon/2) * Math.sin(dLon/2);
-        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-        return R * c;
+        // 2. Fallback: Distance to required context location coordinates
+        if (task.requiredContext && contexts.length > 0) {
+            const ctx = contexts.find(c => c.key === task.requiredContext);
+            if (ctx && ctx.coords_lat != null && ctx.coords_lng != null) {
+                const lat1 = userCoords.latitude;
+                const lon1 = userCoords.longitude;
+                const lat2 = parseFloat(ctx.coords_lat);
+                const lon2 = parseFloat(ctx.coords_lng);
+                
+                const R = 6371000;
+                const dLat = (lat2 - lat1) * Math.PI / 180;
+                const dLon = (lon2 - lon1) * Math.PI / 180;
+                const a = 
+                    Math.sin(dLat/2) * Math.sin(dLat/2) +
+                    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+                    Math.sin(dLon/2) * Math.sin(dLon/2);
+                const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+                return R * c;
+            }
+        }
+        
+        return Infinity;
     };
 
-    // Generate label for distance to context
-    const getDistanceLabel = (task, userCoords, contextsList) => {
-        const dist = getDistanceToContext(task, userCoords, contextsList);
+    // Generate label for distance to target place or context
+    const getDistanceLabel = (task, userCoords) => {
+        const dist = getDistanceToPlace(task, userCoords);
         if (dist === Infinity) return '';
         
-        const contextEmojis = {
-            'work': '💼',
-            'home': '🏠',
-            'school': '🎓',
-            'gym': '🏋️'
-        };
-        const emoji = contextEmojis[task.requiredContext] || '📍';
-        const contextCapitalized = task.requiredContext.charAt(0).toUpperCase() + task.requiredContext.slice(1);
-        
-        if (dist >= 1000) {
-            return `${emoji} ${contextCapitalized} (${(dist / 1000).toFixed(1)} km away)`;
+        if (task.closestPlaceName) {
+            const placeTitle = task.closestPlaceName;
+            if (dist >= 1000) {
+                return `📍 ${placeTitle} (${(dist / 1000).toFixed(1)} km away)`;
+            }
+            return `📍 ${placeTitle} (${Math.round(dist)}m away)`;
         }
-        return `${emoji} ${contextCapitalized} (${Math.round(dist)}m away)`;
+        
+        if (task.requiredContext) {
+            const contextEmojis = {
+                'work': '💼',
+                'home': '🏠',
+                'school': '🎓',
+                'gym': '🏋️'
+            };
+            const emoji = contextEmojis[task.requiredContext] || '📍';
+            const contextCapitalized = task.requiredContext.charAt(0).toUpperCase() + task.requiredContext.slice(1);
+            if (dist >= 1000) {
+                return `${emoji} ${contextCapitalized} (${(dist / 1000).toFixed(1)} km away)`;
+            }
+            return `${emoji} ${contextCapitalized} (${Math.round(dist)}m away)`;
+        }
+        
+        return '';
     };
 
     // Filter by search query
@@ -106,8 +142,8 @@ export default function HomeScreen({
         }
         
         if (sortBy === 'location' && currentLocation?.coords) {
-            const distA = getDistanceToContext(a, currentLocation.coords, contexts);
-            const distB = getDistanceToContext(b, currentLocation.coords, contexts);
+            const distA = getDistanceToPlace(a, currentLocation.coords);
+            const distB = getDistanceToPlace(b, currentLocation.coords);
             if (distA !== distB) {
                 return distA - distB;
             }
@@ -183,6 +219,7 @@ export default function HomeScreen({
             <Text style={styles.listTitle}>My Tasks</Text>
             
             <FlatList
+                scrollEnabled={scrollEnabled}
                 data={sortedTasks}
                 contentContainerStyle={{ paddingBottom: 150 }}
                 keyExtractor={(item) => (item._id || item.id)?.toString()}
@@ -195,8 +232,11 @@ export default function HomeScreen({
                 }
                 renderItem={({ item }) => (
                     <SwipeableRow
+                        taskId={item._id || item.id}
                         onSwipeRight={() => onToggleTaskComplete(item)}
                         onSwipeLeft={() => onDeleteTask(item._id || item.id, item.notificationId)}
+                        onSwipeStart={() => setScrollEnabled(false)}
+                        onSwipeRelease={() => setScrollEnabled(true)}
                     >
                         <TouchableOpacity
                             style={[styles.taskRow, item.isCompleted && styles.taskRowCompleted]}
@@ -209,10 +249,10 @@ export default function HomeScreen({
                                 </Text>
                                 <Text style={styles.taskDate}>⏰ {formatDisplayDate(item.dueDate)}</Text>
                                 
-                                {/* Proximity distance display if location sort is active */}
-                                {sortBy === 'location' && currentLocation?.coords ? (
+                                {/* Proximity distance display */}
+                                {currentLocation?.coords && getDistanceToPlace(item, currentLocation.coords) !== Infinity ? (
                                     <Text style={styles.distanceText}>
-                                        {getDistanceLabel(item, currentLocation.coords, contexts)}
+                                        {getDistanceLabel(item, currentLocation.coords)}
                                     </Text>
                                 ) : item.locationQuery ? (
                                     <Text style={styles.taskLocation}>📍 Suggested: {item.locationQuery}</Text>

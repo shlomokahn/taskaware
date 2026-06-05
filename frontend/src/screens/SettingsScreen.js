@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from 'react-native';
 import * as Updates from 'expo-updates';
 
-export default function SettingsScreen({ username, handleLogout, handleLocationSync, isSyncing, onOpenContextManager, onOpenNotificationSettings }) {
+export default function SettingsScreen({ username, handleLogout, onOpenContextManager, onOpenNotificationSettings }) {
     const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
     const [expandedPrivacy, setExpandedPrivacy] = useState(false);
 
@@ -75,9 +75,6 @@ export default function SettingsScreen({ username, handleLogout, handleLocationS
                     )}
                 </View>
 
-                <TouchableOpacity style={styles.settingsItem} onPress={handleLocationSync} disabled={isSyncing}>
-                    <Text style={styles.settingsItemText}>{isSyncing ? '⏳ Synchronizing location...' : '📍 Location synchronization'}</Text>
-                </TouchableOpacity>
                 <TouchableOpacity 
                     style={styles.settingsItem} 
                     onPress={handleCheckUpdate}

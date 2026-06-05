@@ -231,7 +231,12 @@ export default function App() {
     const fetchTasks = useCallback(async () => {
         if (!token) return;
         try {
-            const res = await fetch(`${API_BASE}/api/tasks/`, { headers: { 'Authorization': `Token ${token}` } });
+            let url = `${API_BASE}/api/tasks/`;
+            if (location && location.coords) {
+                const { latitude, longitude } = location.coords;
+                url += `?latitude=${latitude}&longitude=${longitude}`;
+            }
+            const res = await fetch(url, { headers: { 'Authorization': `Token ${token}` } });
             if (!res.ok) {
                 console.error('Fetch tasks error:', res.status);
                 setTasks([]);
@@ -246,7 +251,7 @@ export default function App() {
             setLoading(false);
             setRefreshing(false);
         }
-    }, [token]);
+    }, [token, location]);
 
     useEffect(() => {
         (async () => {
@@ -370,20 +375,7 @@ export default function App() {
         setActiveTab('home');
     };
 
-    const handleLocationSync = async () => {
-        const result = await syncLocation();
-        if (result.success) {
-            Alert.alert('Success', 'Location synced successfully');
-            return;
-        }
 
-        if (result.error === 'Permission denied') {
-            Alert.alert('Permission Required', 'To sync location you need to grant location permission');
-            return;
-        }
-
-        Alert.alert('Error', 'Location sync failed, please try again');
-    };
 
     const saveUserContext = async (contextKey, value, hours, place) => {
         try {
@@ -469,8 +461,6 @@ export default function App() {
             <SettingsScreen
                 username={username}
                 handleLogout={handleLogout}
-                handleLocationSync={handleLocationSync}
-                isSyncing={isSyncing}
                 onOpenContextManager={() => setShowContextManager(true)}
                 onOpenNotificationSettings={() => setShowNotificationSettings(true)}
             />
