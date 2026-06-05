@@ -16,6 +16,15 @@ export const useLocationSync = (API_BASE, token) => {
                 return { success: false, error: 'Permission denied' };
             }
 
+            try {
+                let { status: bgStatus } = await Location.requestBackgroundPermissionsAsync();
+                if (bgStatus !== 'granted') {
+                    console.log('⚠️ Background location permission denied');
+                }
+            } catch (bgErr) {
+                console.log('Failed to request background location permission:', bgErr);
+            }
+
             let loc = await Location.getCurrentPositionAsync({
                 accuracy: Location.Accuracy.Balanced,
             });

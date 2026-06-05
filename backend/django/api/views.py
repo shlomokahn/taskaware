@@ -1,4 +1,4 @@
-﻿from rest_framework import status, viewsets
+from rest_framework import status, viewsets
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
@@ -6,8 +6,9 @@ from rest_framework.authtoken.models import Token
 from django.contrib.auth import authenticate
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
-from .models import Task, UserProfile, AppVersion, UserContext
+from .models import Task, UserProfile, AppVersion, UserContext, UserContextVisit
 from .serializers import TaskSerializer, UserSerializer, AppVersionSerializer, UserContextSerializer
+import datetime
 from exponent_server_sdk import PushClient, PushMessage
 from google import genai
 from packaging import version as packaging_version
@@ -268,6 +269,164 @@ def login(request):
 
 # --- Location & Push Tokens ---
 
+def check_if_user_visited_today(user, context_key):
+    today = timezone.now().date()
+    visit = UserContextVisit.objects.filter(user=user, context_key=context_key, date=today).first()
+    return visit is not None and visit.was_visited
+
+
+def parse_time_string(time_str):
+    try:
+        parts = time_str.split('-')
+        if len(parts) == 2:
+            start_str = parts[0].strip()
+            end_str = parts[1].strip()
+            start = datetime.datetime.strptime(start_str, "%H:%M").time()
+            end = datetime.datetime.strptime(end_str, "%H:%M").time()
+            return start, end
+    except Exception:
+        pass
+    return None, None
+
+
+def is_time_after_range(hours_str):
+    start, end = parse_time_string(hours_str)
+    if end is None:
+        return True
+    now_time = timezone.localtime(timezone.now()).time()
+    return now_time >= end
+
+
+def is_time_before_range(hours_str):
+    start, end = parse_time_string(hours_str)
+    if start is None:
+        return True
+    now_time = timezone.localtime(timezone.now()).time()
+    return now_time <= start
+
+
+def evaluate_conditional_notifications(user, user_lat, user_lng):
+    # Update daily visits to saved contexts if user is within 200m
+    contexts = UserContext.objects.filter(user=user, coords_lat__isnull=False, coords_lng__isnull=False)
+    today = timezone.now().date()
+    for context in contexts:
+        dist = haversine_distance_m(user_lat, user_lng, float(context.coords_lat), float(context.coords_lng))
+        if dist < 200:
+            visit, created = UserContextVisit.objects.get_or_create(
+                user=user,
+                context_key=context.key,
+                date=today
+            )
+            visit.was_visited = True
+            visit.last_visited_at = timezone.now()
+            visit.save()
+
+    # Get active, unmuted tasks with required context
+    pending_tasks = Task.objects.filter(
+        user=user,
+        is_completed=False,
+        is_muted=False
+    ).exclude(required_context__isnull=True).exclude(required_context='')
+
+    for task in pending_tasks:
+        context_key = task.required_context
+        condition = task.context_condition
+        
+        user_context = UserContext.objects.filter(user=user, key=context_key).first()
+        if not user_context or not user_context.coords_lat:
+            continue
+            
+        context_lat = float(user_context.coords_lat)
+        context_lng = float(user_context.coords_lng)
+        
+        dist_to_context = haversine_distance_m(user_lat, user_lng, context_lat, context_lng)
+        is_currently_at_context = (dist_to_context < 200)
+        
+        context_condition_met = False
+        
+        if condition == 'during':
+            context_condition_met = is_currently_at_context
+        elif condition == 'after':
+            is_outside = (dist_to_context > 300)
+            visited_today = check_if_user_visited_today(user, context_key)
+            
+            hours_condition_met = True
+            if user_context.metadata and 'hours' in user_context.metadata:
+                hours_condition_met = is_time_after_range(user_context.metadata['hours'])
+                
+            context_condition_met = is_outside and visited_today and hours_condition_met
+        elif condition == 'before':
+            is_outside = (dist_to_context > 300)
+            hours_condition_met = True
+            if user_context.metadata and 'hours' in user_context.metadata:
+                hours_condition_met = is_time_before_range(user_context.metadata['hours'])
+            context_condition_met = is_outside and hours_condition_met
+        else:
+            context_condition_met = True
+
+        if context_condition_met:
+            if not task.locationQuery:
+                continue
+                
+            # Anti-spam check: 1000m from last notification location
+            if task.last_notified_lat is not None and task.last_notified_lng is not None:
+                dist_from_last = haversine_distance_m(
+                    user_lat, user_lng,
+                    float(task.last_notified_lat), float(task.last_notified_lng)
+                )
+                if dist_from_last < 1000:
+                    continue
+
+            # API Cost Optimization: Cache results rounded to 3 decimal places (~100m)
+            rounded_lat = round(user_lat, 3)
+            rounded_lng = round(user_lng, 3)
+            
+            search_result = None
+            try:
+                from django.core.cache import cache
+                cache_key = f"places:{rounded_lat}:{rounded_lng}:{task.locationQuery}"
+                search_result = cache.get(cache_key)
+                if not search_result:
+                    search_result = google_places_search(task.locationQuery, user_lat, user_lng, radius_m=300)
+                    cache.set(cache_key, search_result, 3600)
+            except Exception as cache_err:
+                print("Cache/Places error in evaluation:", str(cache_err))
+                try:
+                    search_result = google_places_search(task.locationQuery, user_lat, user_lng, radius_m=300)
+                except Exception:
+                    search_result = None
+
+            if search_result and search_result.get("places"):
+                nearest_place = search_result["places"][0]
+                
+                profile = UserProfile.objects.filter(user=user).first()
+                if profile and profile.expo_push_token:
+                    context_label = dict(UserContext.ContextKey.choices).get(context_key, context_key)
+                    context_translation = {
+                        'work': 'העבודה',
+                        'home': 'הבית',
+                        'school': 'הלימודים',
+                        'gym': 'חדר הכושר'
+                    }
+                    context_hebrew = context_translation.get(context_key, context_label)
+                    
+                    body_message = f"מכיוון שסיימת ב{context_hebrew}, יש {nearest_place['name']} קרוב ({nearest_place['address']}). אל תשכח: '{task.title}'"
+                    if condition == 'during':
+                        body_message = f"בזמן שאתה ב{context_hebrew}, יש {nearest_place['name']} קרוב. אל תשכח: '{task.title}'"
+                    elif condition == 'before':
+                        body_message = f"לפני שאתה מתחיל ב{context_hebrew}, יש {nearest_place['name']} קרוב. אל תשכח: '{task.title}'"
+                    
+                    send_expo_push_notification(
+                        expo_token=profile.expo_push_token,
+                        title="📍 משימה קרובה לביצוע!",
+                        body=body_message
+                    )
+                    
+                    task.last_notified_lat = user_lat
+                    task.last_notified_lng = user_lng
+                    task.save(update_fields=['last_notified_lat', 'last_notified_lng'])
+
+
 @api_view(['PATCH'])
 @permission_classes([IsAuthenticated])
 def update_location(request):
@@ -286,6 +445,14 @@ def update_location(request):
     profile.save(update_fields=['coords_lat', 'coords_lng', 'location_updated_at'])
 
     print(f"📍 Location updated for {user.username}: {latitude}, {longitude}")
+    
+    try:
+        evaluate_conditional_notifications(user, float(latitude), float(longitude))
+    except Exception as e:
+        print("Error in evaluate_conditional_notifications:", str(e))
+        import traceback
+        traceback.print_exc()
+
     return Response({'status': 'Location updated successfully'})
 
 
@@ -420,30 +587,78 @@ def ask_ai(request):
     try:
         client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
 
-        prompt = f"""אתה עוזר חכם לאפליקציית ניהול משימות. המשתמש ייתן לך תיאור של משימה, ועליך להחזיר *אך ורק* את סוג המקום (באנגלית בלבד) שבו ניתן לבצע אותה. אל תוסיף שום הסבר.
-        דוגמה: עבור 'לקנות חלב' תחזיר 'supermarket'.
-        המשימה: '{title}'"""
+        prompt = f"""You are a smart assistant for a task management app. The user will give you a task description in Hebrew or English.
+Analyze it and return a valid JSON object ONLY. Do not write any markdown formatting, do not write ```json ... ```, do not write explanations.
+
+Task: '{title}'
+
+JSON Schema:
+{{
+  "locationQuery": "place type in English (e.g., supermarket, pharmacy, bank, post_office, cafe, gym, post_office, bakery, park, library, restaurant)",
+  "requiredContext": "context key if mentioned, else null (choices: 'work', 'home', 'school', 'gym')",
+  "contextCondition": "relation to context if mentioned, else null (choices: 'before', 'during', 'after')"
+}}
+
+Examples:
+- "לקנות חלב אחרי העבודה" -> {{"locationQuery": "supermarket", "requiredContext": "work", "contextCondition": "after"}}
+- "לעשות אימון כושר" -> {{"locationQuery": "gym", "requiredContext": "gym", "contextCondition": "during"}}
+- "ללמוד למבחן לפני הלימודים" -> {{"locationQuery": "library", "requiredContext": "school", "contextCondition": "before"}}
+- "לקנות לחם" -> {{"locationQuery": "bakery", "requiredContext": null, "contextCondition": null}}
+"""
 
         response = client.models.generate_content(
             model='gemini-2.5-flash',
             contents=prompt,
         )
 
-        location_query = response.text.strip().replace('.', '')
+        response_text = response.text.strip()
+        if response_text.startswith("```"):
+            lines = response_text.splitlines()
+            if lines[0].startswith("```"):
+                lines = lines[1:]
+            if lines[-1].startswith("```"):
+                lines = lines[:-1]
+            response_text = "\n".join(lines).strip()
+
+        location_query = None
+        required_context = None
+        context_condition = None
+
+        try:
+            parsed = json.loads(response_text)
+            location_query = parsed.get("locationQuery")
+            required_context = parsed.get("requiredContext")
+            context_condition = parsed.get("contextCondition")
+        except Exception as json_err:
+            print("Failed to parse JSON from Gemini response:", response_text, str(json_err))
+            location_query = response_text.replace('.', '').strip()
+
+        # Fallback to defaults if empty
+        if not location_query:
+            location_query = "supermarket"
 
         try:
             profile = UserProfile.objects.get(user=request.user)
             if profile.expo_push_token:
+                body_text = f"for the task '{title}', Search the area: {location_query}"
+                if required_context:
+                    cond_heb = {"after": "אחרי", "before": "לפני", "during": "בזמן"}.get(context_condition, "")
+                    ctx_heb = {"work": "העבודה", "home": "הבית", "school": "הלימודים", "gym": "חדר הכושר"}.get(required_context, required_context)
+                    body_text += f" ({cond_heb} {ctx_heb})"
                 send_expo_push_notification(
                     expo_token=profile.expo_push_token,
                     title="The AI ​​has found a location! 📍",
-                    body=f"for the task '{title}', Search the area: {location_query}"
+                    body=body_message if 'body_message' in locals() else body_text
                 )
         except Exception as e:
             print("Push error in AI:", str(e))
 
-        print(f"AI Answered: {location_query}")
-        return Response({"locationQuery": location_query})
+        print(f"AI Answered: locationQuery={location_query}, requiredContext={required_context}, contextCondition={context_condition}")
+        return Response({
+            "locationQuery": location_query,
+            "requiredContext": required_context,
+            "contextCondition": context_condition
+        })
 
     except Exception as e:
         print("Gemini API Error details:", str(e))

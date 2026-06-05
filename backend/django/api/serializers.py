@@ -10,10 +10,18 @@ class TaskSerializer(serializers.ModelSerializer):
     dueDate = serializers.DateTimeField(source='due_date', required=False, allow_null=True)
     notificationId = serializers.CharField(source='notification_id', required=False, allow_blank=True, allow_null=True)
     locationQuery = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    requiredContext = serializers.CharField(source='required_context', required=False, allow_null=True)
+    contextCondition = serializers.CharField(source='context_condition', required=False, allow_null=True)
+    isMuted = serializers.BooleanField(source='is_muted', required=False)
 
     class Meta:
         model = Task
-        fields = ['_id', 'title', 'isCompleted', 'createdAt', 'dueDate', 'notificationId', 'locationQuery']
+        fields = [
+            '_id', 'title', 'isCompleted', 'createdAt', 'dueDate', 
+            'notificationId', 'locationQuery', 'requiredContext', 
+            'contextCondition', 'isMuted'
+        ]
+
 
 
 class UserSerializer(serializers.ModelSerializer):

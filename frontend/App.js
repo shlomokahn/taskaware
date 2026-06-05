@@ -1,4 +1,4 @@
-﻿import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -14,7 +14,44 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
+import * as TaskManager from 'expo-task-manager';
+import * as Location from 'expo-location';
 import { useLocationSync } from './src/useLocationSync.js';
+
+const BACKGROUND_LOCATION_TASK = 'background-location-task';
+
+TaskManager.defineTask(BACKGROUND_LOCATION_TASK, async ({ data, error }) => {
+    if (error) {
+        console.error('Background location task error:', error);
+        return;
+    }
+    if (data) {
+        const { locations } = data;
+        const [location] = locations;
+        if (location) {
+            const { latitude, longitude } = location.coords;
+            try {
+                const savedToken = await AsyncStorage.getItem('userToken');
+                if (savedToken) {
+                    await fetch('https://taskaware-backend.onrender.com/api/location/', {
+                        method: 'PATCH',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Token ${savedToken}`
+                        },
+                        body: JSON.stringify({
+                            latitude,
+                            longitude,
+                        }),
+                    });
+                    console.log('Background location synced:', latitude, longitude);
+                }
+            } catch (err) {
+                console.error('Error syncing background location:', err);
+            }
+        }
+    }
+});
 
 import TaskDetailModal from './src/components/TaskDetailModal';
 import EditTask from './src/EditTask';
@@ -100,6 +137,41 @@ export default function App() {
             }
         }
         setupPushNotifications();
+    }, [token]);
+
+    useEffect(() => {
+        async function startBackgroundTracking() {
+            if (!token) return;
+            try {
+                const { status: fgStatus } = await Location.getForegroundPermissionsAsync();
+                if (fgStatus !== 'granted') return;
+
+                const { status: bgStatus } = await Location.getBackgroundPermissionsAsync();
+                if (bgStatus !== 'granted') {
+                    console.log('Background location permission not granted');
+                    return;
+                }
+
+                const hasStarted = await Location.hasStartedLocationUpdatesAsync(BACKGROUND_LOCATION_TASK);
+                if (!hasStarted) {
+                    await Location.startLocationUpdatesAsync(BACKGROUND_LOCATION_TASK, {
+                        accuracy: Location.Accuracy.Balanced,
+                        distanceInterval: 150,
+                        deferredUpdatesInterval: 60000,
+                        foregroundService: {
+                            notificationTitle: "TaskAware Active",
+                            notificationBody: "Monitoring context and places to remind you of tasks",
+                            notificationColor: "#2f855a",
+                        },
+                        pausesUpdatesAutomatically: true,
+                    });
+                    console.log('Background location updates started');
+                }
+            } catch (err) {
+                console.error('Error starting background tracking:', err);
+            }
+        }
+        startBackgroundTracking();
     }, [token]);
 
     const scheduleNotification = async (taskTitle, date) => {
@@ -195,7 +267,7 @@ export default function App() {
             });
             if (!res.ok) return null;
             const data = await res.json();
-            return data.locationQuery || null;
+            return data;
         } catch (error) {
             console.error('AI location fetch error:', error);
             return null;
@@ -207,12 +279,14 @@ export default function App() {
         if (!titleTrimmed || !token) return;
         setCreating(true);
         try {
-            const suggestedLocation = await fetchLocationFromAI(titleTrimmed);
+            const aiData = await fetchLocationFromAI(titleTrimmed);
             const notifId = reminderDatePassed ? await scheduleNotification(titleTrimmed, reminderDatePassed) : null;
             const payload = {
                 title: titleTrimmed,
                 notificationId: notifId,
-                locationQuery: suggestedLocation,
+                locationQuery: aiData?.locationQuery || null,
+                requiredContext: aiData?.requiredContext || null,
+                contextCondition: aiData?.contextCondition || null,
             };
             if (reminderDatePassed) {
                 payload.dueDate = reminderDatePassed.toISOString();
@@ -381,6 +455,10 @@ export default function App() {
                 API_BASE={API_BASE}
                 currentLocation={location}
                 onClose={() => setSelectedTask(null)}
+                onMuteToggle={async (task, newMuteValue) => {
+                    await handleUpdateTask(task._id || task.id, { isMuted: newMuteValue });
+                    setSelectedTask(prev => prev ? { ...prev, isMuted: newMuteValue } : null);
+                }}
                 onToggle={async (task) => {
                     const newStatus = !task.isCompleted;
                     if (newStatus) await cancelNotification(task.notificationId);

@@ -1,14 +1,21 @@
-﻿import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Image, Linking, Modal, View, Text, StyleSheet, TouchableOpacity, Platform, ScrollView } from 'react-native';
 
-export default function TaskDetailModal({ visible, task, onClose, onToggle, onDelete, onEdit, token, API_BASE, currentLocation }) {
+export default function TaskDetailModal({ visible, task, onClose, onToggle, onDelete, onEdit, onMuteToggle, token, API_BASE, currentLocation }) {
     const [nearbyPlaces, setNearbyPlaces] = useState([]);
     const [mapImageUrl, setMapImageUrl] = useState(null);
     const [nearbyLoading, setNearbyLoading] = useState(false);
     const [nearbyError, setNearbyError] = useState('');
     const [searchInfo, setSearchInfo] = useState(null);
+    const [isMuted, setIsMuted] = useState(false);
     const lastSearchKeyRef = useRef('');
     const activeRequestRef = useRef(0);
+
+    useEffect(() => {
+        if (task) {
+            setIsMuted(!!task.isMuted);
+        }
+    }, [task]);
 
     const taskId = task?._id || task?.id;
 
@@ -230,6 +237,21 @@ export default function TaskDetailModal({ visible, task, onClose, onToggle, onDe
                                 <Text style={styles.iconTileEmoji}>✏️</Text>
                                 <Text style={styles.iconTileLabel}>edit</Text>
                             </TouchableOpacity>
+                            <TouchableOpacity 
+                                style={[styles.iconTile, isMuted && styles.iconTileMuted]} 
+                                onPress={() => {
+                                    const newVal = !isMuted;
+                                    setIsMuted(newVal);
+                                    if (onMuteToggle) {
+                                        onMuteToggle(task, newVal);
+                                    }
+                                }}
+                            >
+                                <Text style={styles.iconTileEmoji}>{isMuted ? "🔊" : "🔇"}</Text>
+                                <Text style={[styles.iconTileLabel, isMuted && styles.iconTileLabelMuted]}>
+                                    {isMuted ? "unmute" : "mute"}
+                                </Text>
+                            </TouchableOpacity>
                             <TouchableOpacity style={[styles.iconTile, styles.iconTileDestructive]}
                                 onPress={() => onDelete(task._id || task.id)}>
                                 <Text style={styles.iconTileEmoji}>🗑️</Text>
@@ -308,9 +330,11 @@ const styles = StyleSheet.create({
     iconRow: { flexDirection: 'row', gap: 10, marginBottom: 16 },
     iconTile: { flex: 1, flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#fff', borderRadius: 14, paddingVertical: 13, borderWidth: 1, borderColor: '#E5E7EB' },
     iconTileDestructive: { borderColor: '#FEE2E2', backgroundColor: '#FFF5F5' },
+    iconTileMuted: { borderColor: '#E5E7EB', backgroundColor: '#F3F4F6' },
     iconTileEmoji: { fontSize: 20 },
     iconTileLabel: { fontSize: 14, fontWeight: '700', color: '#374151' },
     iconTileLabelDestructive: { color: '#EF4444' },
+    iconTileLabelMuted: { color: '#9CA3AF' },
     cta: { borderRadius: 16, paddingVertical: 16, alignItems: 'center' },
     ctaDo: { backgroundColor: GREEN },
     ctaUndo: { backgroundColor: '#F3F4F6' },
