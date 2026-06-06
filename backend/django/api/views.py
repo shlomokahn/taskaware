@@ -514,6 +514,33 @@ def evaluate_conditional_notifications(user, user_lat, user_lng):
                     send_telegram_message(profile.telegram_chat_id, tg_text, reply_markup=reply_markup)
                 alert_sent = True
                 
+            if profile.whatsapp_number:
+                if len(notify_list) == 1:
+                    task = notify_list[0]
+                    context_label = dict(UserContext.ContextKey.choices).get(task.required_context, task.required_context)
+                    context_name = context_label.lower() if context_label else "location"
+                    
+                    wa_text = f"📍 *Task location nearby!*\n\n"
+                    if task.context_condition == 'during':
+                        wa_text += f"While you are at {context_name}, there is a *{nearest_place['name']}* nearby ({nearest_place['address']}).\n"
+                    elif task.context_condition == 'before':
+                        wa_text += f"Before you start at {context_name}, there is a *{nearest_place['name']}* nearby ({nearest_place['address']}).\n"
+                    else:
+                        wa_text += f"Since you finished at {context_name}, there is a *{nearest_place['name']}* nearby ({nearest_place['address']}).\n"
+                    wa_text += f"\nDon't forget: *{task.title}*\n\n"
+                    wa_text += f"👉 Reply *complete {task.id}* to mark completed, or *mute {task.id}* to mute alerts."
+                    send_whatsapp_message(profile.whatsapp_number, wa_text)
+                else:
+                    wa_text = f"📍 *{nearest_place['name']}* nearby ({nearest_place['address']})\n"
+                    wa_text += f"You have *{len(notify_list)} tasks* nearby:\n\n"
+                    
+                    for t in notify_list:
+                        wa_text += f"• *{t.title}* (ID: {t.id})\n"
+                        
+                    wa_text += f"\n👉 Reply *complete <id>* or *mute <id>* to perform actions."
+                    send_whatsapp_message(profile.whatsapp_number, wa_text)
+                alert_sent = True
+                
             if alert_sent:
                 # Update last notified positions
                 for task in notify_list:
@@ -1052,7 +1079,7 @@ def download_telegram_file(file_id):
         return None
 
 
-def parse_voice_message_with_ai(audio_bytes):
+def parse_voice_message_with_ai(audio_bytes, mime_type='audio/ogg'):
     gemini_key = os.environ.get("GEMINI_API_KEY")
     if not gemini_key:
         return None
@@ -1088,7 +1115,7 @@ Examples:
 
         audio_part = types.Part.from_bytes(
             data=audio_bytes,
-            mime_type='audio/ogg',
+            mime_type=mime_type,
         )
         
         response = client.models.generate_content(
@@ -1509,3 +1536,246 @@ def trigger_daily_digests(request):
                 sent_count += 1
                 
     return Response({"status": "success", "sent_digests": sent_count}, status=status.HTTP_200_OK)
+
+
+# --- WhatsApp Bot Helper & Views ---
+
+def send_whatsapp_message(to_number, body):
+    service_url = os.environ.get("WHATSAPP_SERVICE_URL")
+    service_key = os.environ.get("WHATSAPP_SERVICE_KEY") or "taskaware-whatsapp-key-2026"
+    if not service_url:
+        print("WHATSAPP_SERVICE_URL is not configured")
+        return
+        
+    url = f"{service_url.rstrip('/')}/send-message"
+    payload = {
+        "to": to_number,
+        "text": body
+    }
+    try:
+        req = urllib.request.Request(
+            url,
+            data=json.dumps(payload).encode('utf-8'),
+            headers={
+                'Content-Type': 'application/json',
+                'X-Whatsapp-Service-Key': service_key
+            }
+        )
+        with urllib.request.urlopen(req, timeout=10) as response:
+            res_data = json.loads(response.read().decode('utf-8'))
+            if not res_data.get("success"):
+                print("WhatsApp service returned error:", res_data)
+    except Exception as e:
+        print("Failed to send WhatsApp message:", str(e))
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def generate_whatsapp_link_code(request):
+    import random
+    code = str(random.randint(1000, 9999))
+    
+    profile, _ = UserProfile.objects.get_or_create(user=request.user)
+    profile.whatsapp_link_code = code
+    profile.whatsapp_link_code_expires = timezone.now() + datetime.timedelta(minutes=10)
+    profile.save()
+    
+    return Response({"code": code}, status=status.HTTP_200_OK)
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def whatsapp_webhook(request):
+    service_key = os.environ.get("WHATSAPP_SERVICE_KEY") or "taskaware-whatsapp-key-2026"
+    incoming_key = request.headers.get("X-Whatsapp-Service-Key")
+    if incoming_key != service_key:
+        return Response({"error": "Unauthorized"}, status=status.HTTP_401_UNAUTHORIZED)
+        
+    data = request.data
+    sender_number = data.get("from")
+    text = data.get("text", "").strip()
+    media = data.get("media")
+    
+    if not sender_number:
+        return Response({"status": "ignored"})
+        
+    profile = UserProfile.objects.filter(whatsapp_number=sender_number).first()
+    
+    # 1. Handle Link Code
+    if not profile:
+        code_match = re.search(r'\b\d{4}\b', text)
+        code = code_match.group(0) if code_match else None
+        
+        if code:
+            profile = UserProfile.objects.filter(
+                whatsapp_link_code=code,
+                whatsapp_link_code_expires__gt=timezone.now()
+            ).first()
+            
+            if profile:
+                profile.whatsapp_number = sender_number
+                profile.whatsapp_link_code = None
+                profile.whatsapp_link_code_expires = None
+                profile.save()
+                
+                send_whatsapp_message(sender_number, f"🎉 *Connected successfully!*\nYour WhatsApp account is now linked to TaskAware user: *{profile.user.username}*.\n\nYou can start adding tasks directly by typing or sending a voice note.")
+                return Response({"status": "ok"})
+                
+        send_whatsapp_message(sender_number, "Welcome to *TaskAware Bot*! 📍\n\nTo start adding tasks, please link your account:\n1. Open settings in the TaskAware App.\n2. Tap 'Connect WhatsApp'.\n3. Copy the code or click the direct link to send your code here.")
+        return Response({"status": "ok"})
+        
+    # 2. Handle Voice Note
+    if media and media.get("data") and media.get("mimetype", "").startswith("audio/"):
+        import base64
+        send_whatsapp_message(sender_number, "🎙️ *Processing voice message with AI...*")
+        try:
+            audio_bytes = base64.b64decode(media["data"])
+            ai_data = parse_voice_message_with_ai(audio_bytes, mime_type=media.get("mimetype", "audio/ogg"))
+            
+            if not ai_data or not ai_data.get("title"):
+                send_whatsapp_message(sender_number, "❌ *AI failed to parse your voice note.* Please speak clearly and try again.")
+                return Response({"status": "ok"})
+                
+            due_date = None
+            due_date_str = ai_data.get("dueDate")
+            if due_date_str:
+                due_date = datetime.datetime.fromisoformat(due_date_str.replace("Z", "+00:00"))
+                
+            task = Task.objects.create(
+                user=profile.user,
+                title=ai_data.get("title"),
+                locationQuery=ai_data.get("locationQuery"),
+                required_context=ai_data.get("requiredContext"),
+                context_condition=ai_data.get("contextCondition"),
+                due_date=due_date
+            )
+            
+            loc_info = f"📍 {task.locationQuery}" if task.locationQuery else ""
+            due_info = f"⏰ {task.due_date.strftime('%d/%m/%y %H:%M')}" if task.due_date else ""
+            ctx_info = f"({task.required_context})" if task.required_context else ""
+            
+            send_whatsapp_message(sender_number, f"✅ *Task created via Voice!*\n\n📝 *{task.title}* {ctx_info}\n{due_info} {loc_info}")
+        except Exception as err:
+            print("WhatsApp voice task creation error:", str(err))
+            send_whatsapp_message(sender_number, "❌ *Error creating task from voice note.*")
+            
+        return Response({"status": "ok"})
+        
+    # 3. Process Text Replies & Commands
+    text_lower = text.lower()
+    
+    complete_match = re.match(r'^(?:complete|finish|done)\s+(\d+)$', text_lower)
+    mute_match = re.match(r'^(?:mute)\s+(\d+)$', text_lower)
+    
+    if complete_match:
+        try:
+            task_id = int(complete_match.group(1))
+            task = Task.objects.filter(user=profile.user, id=task_id).first()
+            if task:
+                task.is_completed = True
+                task.save(update_fields=['is_completed'])
+                send_whatsapp_message(sender_number, f"✅ Task *'{task.title}'* completed successfully!")
+            else:
+                send_whatsapp_message(sender_number, "❌ Task not found.")
+        except Exception as e:
+            send_whatsapp_message(sender_number, "❌ Error completing task.")
+            
+    elif mute_match:
+        try:
+            task_id = int(mute_match.group(1))
+            task = Task.objects.filter(user=profile.user, id=task_id).first()
+            if task:
+                task.is_muted = True
+                task.save(update_fields=['is_muted'])
+                send_whatsapp_message(sender_number, f"🔕 Alert for task *'{task.title}'* muted.")
+            else:
+                send_whatsapp_message(sender_number, "❌ Task not found.")
+        except Exception as e:
+            send_whatsapp_message(sender_number, "❌ Error muting task.")
+            
+    elif text == "tasks" or text_lower.startswith("/tasks"):
+        tasks = Task.objects.filter(user=profile.user, is_completed=False).order_by('due_date')
+        if not tasks.exists():
+            send_whatsapp_message(sender_number, "🎉 You have no active tasks!")
+        else:
+            msg = f"📋 *Your Active Tasks ({tasks.count()}):*\n\n"
+            for i, t in enumerate(tasks):
+                due_str = t.due_date.strftime("%d/%m/%y %H:%M") if t.due_date else "No reminder"
+                loc_str = f"📍 {t.locationQuery}" if t.locationQuery else ""
+                ctx_str = f"({t.required_context})" if t.required_context else ""
+                msg += f"{i+1}. *{t.title}* {ctx_str}\n   ⏰ {due_str} {loc_str}\n\n"
+            send_whatsapp_message(sender_number, msg)
+            
+    elif text == "today" or text_lower.startswith("/today"):
+        tasks = Task.objects.filter(user=profile.user, is_completed=False)
+        if not tasks.exists():
+            send_whatsapp_message(sender_number, "🎉 You have no active tasks!")
+        else:
+            context_groups = {
+                "home": [],
+                "work": [],
+                "school": [],
+                "gym": [],
+                "other": []
+            }
+            for t in tasks:
+                ctx = t.required_context
+                if ctx in context_groups:
+                    context_groups[ctx].append(t)
+                else:
+                    context_groups["other"].append(t)
+                    
+            msg = "📅 *Today's Tasks by Context:*\n\n"
+            headers = {
+                "home": "🏠 *Home Context*",
+                "work": "💼 *Work Context*",
+                "school": "🏫 *School Context*",
+                "gym": "💪 *Gym Context*",
+                "other": "📋 *General / Other Tasks*"
+            }
+            
+            has_content = False
+            for key in ["home", "work", "school", "gym", "other"]:
+                group_tasks = context_groups[key]
+                if group_tasks:
+                    has_content = True
+                    msg += f"{headers[key]}:\n"
+                    for t in group_tasks:
+                        due_str = f"⏰ {t.due_date.strftime('%H:%M')}" if t.due_date else ""
+                        loc_str = f"📍 {t.locationQuery}" if t.locationQuery else ""
+                        cond_str = f"({t.context_condition})" if t.context_condition else ""
+                        msg += f"• *{t.title}* {cond_str} {due_str} {loc_str}\n"
+                    msg += "\n"
+                    
+            if not has_content:
+                msg = "🎉 You have no active tasks!"
+            send_whatsapp_message(sender_number, msg)
+            
+    elif text == "help" or text_lower.startswith("/help"):
+        send_whatsapp_message(sender_number, "💡 *How to use TaskAware WhatsApp Bot:*\n\n• Simply write any task (e.g. 'Buy milk tomorrow at 8 AM').\n• Send a voice note and our AI will transcribe and add it to your list.\n\n*Commands:*\n• *tasks* - Show your active tasks\n• *today* - Show tasks grouped by context\n• *complete <id>* - Mark task completed\n• *mute <id>* - Mute location alerts for task\n• *help* - Display this help guide")
+        
+    else:
+        # Free text -> Create task
+        try:
+            ai_data = fetch_ai_details_for_telegram(text, profile.user)
+            due_date = ai_data.get("dueDate")
+            
+            task = Task.objects.create(
+                user=profile.user,
+                title=text,
+                locationQuery=ai_data.get("locationQuery"),
+                required_context=ai_data.get("requiredContext"),
+                context_condition=ai_data.get("contextCondition"),
+                due_date=due_date
+            )
+            
+            loc_info = f"📍 {task.locationQuery}" if task.locationQuery else ""
+            due_info = f"⏰ {task.due_date.strftime('%d/%m/%y %H:%M')}" if task.due_date else ""
+            
+            send_whatsapp_message(sender_number, f"✅ *Task created!*\n\n📝 *{task.title}*\n{due_info} {loc_info}")
+        except Exception as err:
+            print("WhatsApp task creation error:", str(err))
+            send_whatsapp_message(sender_number, f"❌ Failed to parse task, saving as basic task:\n\n📝 *{text}*")
+            Task.objects.create(user=profile.user, title=text)
+            
+    return Response({"status": "ok"})

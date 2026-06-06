@@ -9,6 +9,10 @@ export default function SettingsScreen({ username, handleLogout, onOpenContextMa
     const [linkingCode, setLinkingCode] = useState(null);
     const [isGeneratingCode, setIsGeneratingCode] = useState(false);
     const [expandedTelegram, setExpandedTelegram] = useState(false);
+    const [isWhatsappLinked, setIsWhatsappLinked] = useState(false);
+    const [whatsappLinkingCode, setWhatsappLinkingCode] = useState(null);
+    const [isGeneratingWhatsappCode, setIsGeneratingWhatsappCode] = useState(false);
+    const [expandedWhatsapp, setExpandedWhatsapp] = useState(false);
 
     const fetchSettings = async () => {
         if (!token || !API_BASE) return;
@@ -19,6 +23,7 @@ export default function SettingsScreen({ username, handleLogout, onOpenContextMa
             if (res.ok) {
                 const data = await res.json();
                 setIsTelegramLinked(data.isTelegramLinked || false);
+                setIsWhatsappLinked(data.isWhatsappLinked || false);
             }
         } catch (err) {
             console.error('Error fetching settings:', err);
@@ -46,6 +51,26 @@ export default function SettingsScreen({ username, handleLogout, onOpenContextMa
             Alert.alert('Error', 'Network error generating code');
         } finally {
             setIsGeneratingCode(false);
+        }
+    };
+
+    const handleConnectWhatsapp = async () => {
+        setIsGeneratingWhatsappCode(true);
+        try {
+            const res = await fetch(`${API_BASE}/api/profile/whatsapp-link-code/`, {
+                method: 'POST',
+                headers: { 'Authorization': `Token ${token}` }
+            });
+            if (res.ok) {
+                const data = await res.json();
+                setWhatsappLinkingCode(data.code);
+            } else {
+                Alert.alert('Error', 'Failed to generate code');
+            }
+        } catch (err) {
+            Alert.alert('Error', 'Network error generating code');
+        } finally {
+            setIsGeneratingWhatsappCode(false);
         }
     };
 
@@ -167,6 +192,62 @@ export default function SettingsScreen({ username, handleLogout, onOpenContextMa
                                     disabled={isGeneratingCode}
                                 >
                                     {isGeneratingCode ? (
+                                        <ActivityIndicator color="#fff" />
+                                    ) : (
+                                        <Text style={styles.generateBtnText}>Generate Link Code</Text>
+                                    )}
+                                </TouchableOpacity>
+                            )}
+                        </View>
+                    )}
+                </View>
+
+                {/* WhatsApp Bot Integration */}
+                <View style={styles.cardContainer}>
+                    <TouchableOpacity 
+                        style={styles.settingsItem}
+                        onPress={() => setExpandedWhatsapp(!expandedWhatsapp)}
+                    >
+                        <View style={styles.itemContent}>
+                            <Text style={styles.settingsItemText}>💬 WhatsApp Integration</Text>
+                            {isWhatsappLinked ? (
+                                <Text style={styles.statusConnected}>Connected 🟢</Text>
+                            ) : (
+                                <Text style={styles.expandIcon}>{expandedWhatsapp ? '▼' : '▶'}</Text>
+                            )}
+                        </View>
+                    </TouchableOpacity>
+
+                    {expandedWhatsapp && !isWhatsappLinked && (
+                        <View style={styles.nestedTelegramContainer}>
+                            <Text style={styles.telegramSubText}>
+                                Connect TaskAware to your WhatsApp Bot to add tasks using voice or text.
+                            </Text>
+
+                            {whatsappLinkingCode ? (
+                                <View style={styles.codeWrapper}>
+                                    <Text style={styles.codeLabel}>Your Link Code:</Text>
+                                    <Text style={styles.codeText}>{whatsappLinkingCode}</Text>
+                                    <Text style={styles.expiryNote}>Expires in 10 minutes</Text>
+                                    
+                                    <Text style={[styles.telegramSubText, {textAlign: 'center', marginBottom: 15, fontWeight: 'bold'}]}>
+                                        Send this code as a WhatsApp message to your Bot's number to connect.
+                                    </Text>
+
+                                    <TouchableOpacity 
+                                        style={styles.checkConnBtn}
+                                        onPress={fetchSettings}
+                                    >
+                                        <Text style={styles.checkConnBtnText}>Check Connection 🔄</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            ) : (
+                                <TouchableOpacity 
+                                    style={styles.generateBtn}
+                                    onPress={handleConnectWhatsapp}
+                                    disabled={isGeneratingWhatsappCode}
+                                >
+                                    {isGeneratingWhatsappCode ? (
                                         <ActivityIndicator color="#fff" />
                                     ) : (
                                         <Text style={styles.generateBtnText}>Generate Link Code</Text>

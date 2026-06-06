@@ -75,6 +75,10 @@ class UserProfile(models.Model):
     telegram_link_code = models.CharField(max_length=10, blank=True, null=True)
     telegram_link_code_expires = models.DateTimeField(blank=True, null=True)
 
+    whatsapp_number = models.CharField(max_length=50, blank=True, null=True, unique=True)
+    whatsapp_link_code = models.CharField(max_length=10, blank=True, null=True)
+    whatsapp_link_code_expires = models.DateTimeField(blank=True, null=True)
+
     def __str__(self):
         return f"Profile for {self.user.username}"
 

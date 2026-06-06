@@ -20,7 +20,9 @@ urlpatterns = [
     path('google-places/details/', views.google_place_details, name='google-place-details'),
     path('profile/settings/', views.profile_settings, name='profile-settings'),
     path('profile/telegram-link-code/', views.generate_telegram_link_code, name='telegram-link-code'),
+    path('profile/whatsapp-link-code/', views.generate_whatsapp_link_code, name='whatsapp-link-code'),
     path('telegram/webhook/', views.telegram_webhook, name='telegram-webhook'),
+    path('whatsapp/webhook/', views.whatsapp_webhook, name='whatsapp-webhook'),
     path('telegram/trigger-digests/', views.trigger_daily_digests, name='telegram-trigger-digests'),
     path('', include(router.urls)),
 ]
