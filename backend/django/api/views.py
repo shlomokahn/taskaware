@@ -1779,3 +1779,9 @@ def whatsapp_webhook(request):
             Task.objects.create(user=profile.user, title=text)
             
     return Response({"status": "ok"})
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def health_check(request):
+    return Response({"status": "healthy"}, status=status.HTTP_200_OK)

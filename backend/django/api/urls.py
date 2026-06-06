@@ -19,6 +19,7 @@ urlpatterns = [
     path('google-places/autocomplete/', views.google_places_autocomplete, name='google-places-autocomplete'),
     path('google-places/details/', views.google_place_details, name='google-place-details'),
     path('profile/settings/', views.profile_settings, name='profile-settings'),
+    path('health/', views.health_check, name='health_api'),
     path('profile/telegram-link-code/', views.generate_telegram_link_code, name='telegram-link-code'),
     path('profile/whatsapp-link-code/', views.generate_whatsapp_link_code, name='whatsapp-link-code'),
     path('telegram/webhook/', views.telegram_webhook, name='telegram-webhook'),
