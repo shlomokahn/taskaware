@@ -46,11 +46,11 @@ client.on('message', async (msg) => {
     // Only process private chats (exclude groups)
     if (msg.from.endsWith('@g.us')) return;
 
-    const senderNumber = msg.from.split('@')[0];
-    console.log(`📩 Received message from ${senderNumber}: ${msg.body || '[Media]'}`);
+    const senderJid = msg.from;
+    console.log(`📩 Received message from ${senderJid}: ${msg.body || '[Media]'}`);
 
     const payload = {
-        from: senderNumber,
+        from: senderJid,
         text: msg.body || ''
     };
 
@@ -97,9 +97,9 @@ app.post('/send-message', async (req, res) => {
     }
 
     try {
-        const chatId = `${to}@c.us`;
+        const chatId = to.includes('@') ? to : `${to}@c.us`;
         await client.sendMessage(chatId, text);
-        console.log(`📤 Message sent to ${to}: ${text}`);
+        console.log(`📤 Message sent to ${chatId}: ${text}`);
         res.json({ success: true });
     } catch (err) {
         console.error(`Failed to send message to ${to}:`, err.message);
