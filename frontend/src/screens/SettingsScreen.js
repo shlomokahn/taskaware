@@ -74,6 +74,50 @@ export default function SettingsScreen({ username, handleLogout, onOpenContextMa
         }
     };
 
+    const handleDisconnectTelegram = async () => {
+        try {
+            const res = await fetch(`${API_BASE}/api/profile/settings/`, {
+                method: 'PATCH',
+                headers: {
+                    'Authorization': `Token ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ telegramChatId: null })
+            });
+            if (res.ok) {
+                setIsTelegramLinked(false);
+                setLinkingCode(null);
+                Alert.alert('Disconnected', 'Telegram account disconnected successfully');
+            } else {
+                Alert.alert('Error', 'Failed to disconnect');
+            }
+        } catch (err) {
+            Alert.alert('Error', 'Network error disconnecting');
+        }
+    };
+
+    const handleDisconnectWhatsapp = async () => {
+        try {
+            const res = await fetch(`${API_BASE}/api/profile/settings/`, {
+                method: 'PATCH',
+                headers: {
+                    'Authorization': `Token ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ whatsappNumber: null })
+            });
+            if (res.ok) {
+                setIsWhatsappLinked(false);
+                setWhatsappLinkingCode(null);
+                Alert.alert('Disconnected', 'WhatsApp account disconnected successfully');
+            } else {
+                Alert.alert('Error', 'Failed to disconnect');
+            }
+        } catch (err) {
+            Alert.alert('Error', 'Network error disconnecting');
+        }
+    };
+
     const handleCheckUpdate = async () => {
         setIsCheckingUpdate(true);
         try {
@@ -152,51 +196,70 @@ export default function SettingsScreen({ username, handleLogout, onOpenContextMa
                         <View style={styles.itemContent}>
                             <Text style={styles.settingsItemText}>💬 Telegram Integration</Text>
                             {isTelegramLinked ? (
-                                <Text style={styles.statusConnected}>Connected 🟢</Text>
+                                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                    <Text style={[styles.statusConnected, {marginRight: 8}]}>Connected 🟢</Text>
+                                    <Text style={styles.expandIcon}>{expandedTelegram ? '▼' : '▶'}</Text>
+                                </View>
                             ) : (
                                 <Text style={styles.expandIcon}>{expandedTelegram ? '▼' : '▶'}</Text>
                             )}
                         </View>
                     </TouchableOpacity>
 
-                    {expandedTelegram && !isTelegramLinked && (
+                    {expandedTelegram && (
                         <View style={styles.nestedTelegramContainer}>
-                            <Text style={styles.telegramSubText}>
-                                Connect TaskAware to our Telegram Bot to add tasks using voice or text.
-                            </Text>
-
-                            {linkingCode ? (
-                                <View style={styles.codeWrapper}>
-                                    <Text style={styles.codeLabel}>Your Link Code:</Text>
-                                    <Text style={styles.codeText}>{linkingCode}</Text>
-                                    <Text style={styles.expiryNote}>Expires in 10 minutes</Text>
-                                    
+                            {isTelegramLinked ? (
+                                <View>
+                                    <Text style={styles.telegramSubText}>
+                                        Your Telegram account is successfully connected to TaskAware.
+                                    </Text>
                                     <TouchableOpacity 
-                                        style={styles.telegramActionBtn}
-                                        onPress={() => Linking.openURL(`https://t.me/taskaware1_bot?start=link_${linkingCode}`)}
+                                        style={[styles.logoutFullBtn, { marginTop: 10, marginBottom: 0 }]}
+                                        onPress={handleDisconnectTelegram}
                                     >
-                                        <Text style={styles.telegramActionBtnText}>Open Telegram Bot 🚀</Text>
-                                    </TouchableOpacity>
-
-                                    <TouchableOpacity 
-                                        style={styles.checkConnBtn}
-                                        onPress={fetchSettings}
-                                    >
-                                        <Text style={styles.checkConnBtnText}>Check Connection 🔄</Text>
+                                        <Text style={styles.logoutFullText}>Disconnect Telegram 📴</Text>
                                     </TouchableOpacity>
                                 </View>
                             ) : (
-                                <TouchableOpacity 
-                                    style={styles.generateBtn}
-                                    onPress={handleConnectTelegram}
-                                    disabled={isGeneratingCode}
-                                >
-                                    {isGeneratingCode ? (
-                                        <ActivityIndicator color="#fff" />
+                                <View>
+                                    <Text style={styles.telegramSubText}>
+                                        Connect TaskAware to our Telegram Bot to add tasks using voice or text.
+                                    </Text>
+
+                                    {linkingCode ? (
+                                        <View style={styles.codeWrapper}>
+                                            <Text style={styles.codeLabel}>Your Link Code:</Text>
+                                            <Text style={styles.codeText}>{linkingCode}</Text>
+                                            <Text style={styles.expiryNote}>Expires in 10 minutes</Text>
+                                            
+                                            <TouchableOpacity 
+                                                style={styles.telegramActionBtn}
+                                                onPress={() => Linking.openURL(`https://t.me/taskaware1_bot?start=link_${linkingCode}`)}
+                                            >
+                                                <Text style={styles.telegramActionBtnText}>Open Telegram Bot 🚀</Text>
+                                            </TouchableOpacity>
+
+                                            <TouchableOpacity 
+                                                style={styles.checkConnBtn}
+                                                onPress={fetchSettings}
+                                            >
+                                                <Text style={styles.checkConnBtnText}>Check Connection 🔄</Text>
+                                            </TouchableOpacity>
+                                        </View>
                                     ) : (
-                                        <Text style={styles.generateBtnText}>Generate Link Code</Text>
+                                        <TouchableOpacity 
+                                            style={styles.generateBtn}
+                                            onPress={handleConnectTelegram}
+                                            disabled={isGeneratingCode}
+                                        >
+                                            {isGeneratingCode ? (
+                                                <ActivityIndicator color="#fff" />
+                                            ) : (
+                                                <Text style={styles.generateBtnText}>Generate Link Code</Text>
+                                            )}
+                                        </TouchableOpacity>
                                     )}
-                                </TouchableOpacity>
+                                </View>
                             )}
                         </View>
                     )}
@@ -211,48 +274,67 @@ export default function SettingsScreen({ username, handleLogout, onOpenContextMa
                         <View style={styles.itemContent}>
                             <Text style={styles.settingsItemText}>💬 WhatsApp Integration</Text>
                             {isWhatsappLinked ? (
-                                <Text style={styles.statusConnected}>Connected 🟢</Text>
+                                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                    <Text style={[styles.statusConnected, {marginRight: 8}]}>Connected 🟢</Text>
+                                    <Text style={styles.expandIcon}>{expandedWhatsapp ? '▼' : '▶'}</Text>
+                                </View>
                             ) : (
                                 <Text style={styles.expandIcon}>{expandedWhatsapp ? '▼' : '▶'}</Text>
                             )}
                         </View>
                     </TouchableOpacity>
 
-                    {expandedWhatsapp && !isWhatsappLinked && (
+                    {expandedWhatsapp && (
                         <View style={styles.nestedTelegramContainer}>
-                            <Text style={styles.telegramSubText}>
-                                Connect TaskAware to your WhatsApp Bot to add tasks using voice or text.
-                            </Text>
-
-                            {whatsappLinkingCode ? (
-                                <View style={styles.codeWrapper}>
-                                    <Text style={styles.codeLabel}>Your Link Code:</Text>
-                                    <Text style={styles.codeText}>{whatsappLinkingCode}</Text>
-                                    <Text style={styles.expiryNote}>Expires in 10 minutes</Text>
-                                    
-                                    <Text style={[styles.telegramSubText, {textAlign: 'center', marginBottom: 15, fontWeight: 'bold'}]}>
-                                        Send this code as a WhatsApp message to your Bot's number to connect.
+                            {isWhatsappLinked ? (
+                                <View>
+                                    <Text style={styles.telegramSubText}>
+                                        Your WhatsApp account is successfully connected to TaskAware.
                                     </Text>
-
                                     <TouchableOpacity 
-                                        style={styles.checkConnBtn}
-                                        onPress={fetchSettings}
+                                        style={[styles.logoutFullBtn, { marginTop: 10, marginBottom: 0 }]}
+                                        onPress={handleDisconnectWhatsapp}
                                     >
-                                        <Text style={styles.checkConnBtnText}>Check Connection 🔄</Text>
+                                        <Text style={styles.logoutFullText}>Disconnect WhatsApp 📴</Text>
                                     </TouchableOpacity>
                                 </View>
                             ) : (
-                                <TouchableOpacity 
-                                    style={styles.generateBtn}
-                                    onPress={handleConnectWhatsapp}
-                                    disabled={isGeneratingWhatsappCode}
-                                >
-                                    {isGeneratingWhatsappCode ? (
-                                        <ActivityIndicator color="#fff" />
+                                <View>
+                                    <Text style={styles.telegramSubText}>
+                                        Connect TaskAware to your WhatsApp Bot to add tasks using voice or text.
+                                    </Text>
+
+                                    {whatsappLinkingCode ? (
+                                        <View style={styles.codeWrapper}>
+                                            <Text style={styles.codeLabel}>Your Link Code:</Text>
+                                            <Text style={styles.codeText}>{whatsappLinkingCode}</Text>
+                                            <Text style={styles.expiryNote}>Expires in 10 minutes</Text>
+                                            
+                                            <Text style={[styles.telegramSubText, {textAlign: 'center', marginBottom: 15, fontWeight: 'bold'}]}>
+                                                Send this code as a WhatsApp message to your Bot's number to connect.
+                                            </Text>
+
+                                            <TouchableOpacity 
+                                                style={styles.checkConnBtn}
+                                                onPress={fetchSettings}
+                                            >
+                                                <Text style={styles.checkConnBtnText}>Check Connection 🔄</Text>
+                                            </TouchableOpacity>
+                                        </View>
                                     ) : (
-                                        <Text style={styles.generateBtnText}>Generate Link Code</Text>
+                                        <TouchableOpacity 
+                                            style={styles.generateBtn}
+                                            onPress={handleConnectWhatsapp}
+                                            disabled={isGeneratingWhatsappCode}
+                                        >
+                                            {isGeneratingWhatsappCode ? (
+                                                <ActivityIndicator color="#fff" />
+                                            ) : (
+                                                <Text style={styles.generateBtnText}>Generate Link Code</Text>
+                                            )}
+                                        </TouchableOpacity>
                                     )}
-                                </TouchableOpacity>
+                                </View>
                             )}
                         </View>
                     )}

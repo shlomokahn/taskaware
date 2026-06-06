@@ -145,12 +145,15 @@ class UserProfileSerializer(serializers.ModelSerializer):
     mutedContexts = serializers.JSONField(source='muted_contexts', required=False)
     isTelegramLinked = serializers.SerializerMethodField()
     isWhatsappLinked = serializers.SerializerMethodField()
+    telegramChatId = serializers.CharField(source='telegram_chat_id', required=False, allow_null=True, allow_blank=True)
+    whatsappNumber = serializers.CharField(source='whatsapp_number', required=False, allow_null=True, allow_blank=True)
 
     class Meta:
         model = UserProfile
         fields = [
             'notificationsEnabled', 'dndEnabled', 'dndStart', 'dndEnd', 
-            'notificationRadius', 'mutedContexts', 'isTelegramLinked', 'isWhatsappLinked'
+            'notificationRadius', 'mutedContexts', 'isTelegramLinked', 'isWhatsappLinked',
+            'telegramChatId', 'whatsappNumber'
         ]
 
     def get_isTelegramLinked(self, obj):
