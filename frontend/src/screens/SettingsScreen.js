@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, Linking } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, Linking, ScrollView } from 'react-native';
 import * as Updates from 'expo-updates';
 
 export default function SettingsScreen({ username, handleLogout, onOpenContextManager, onOpenNotificationSettings, token, API_BASE }) {
@@ -79,7 +79,7 @@ export default function SettingsScreen({ username, handleLogout, onOpenContextMa
     };
 
     return (
-        <View style={styles.settingsContainer}>
+        <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.settingsContainer}>
             <Text style={styles.settingsTitle}>Settings</Text>
 
             <View style={styles.profileCard}>
@@ -148,7 +148,7 @@ export default function SettingsScreen({ username, handleLogout, onOpenContextMa
                                     
                                     <TouchableOpacity 
                                         style={styles.telegramActionBtn}
-                                        onPress={() => Linking.openURL(`https://t.me/TaskAwareBot?start=link_${linkingCode}`)}
+                                        onPress={() => Linking.openURL(`https://t.me/taskaware1_bot?start=link_${linkingCode}`)}
                                     >
                                         <Text style={styles.telegramActionBtnText}>Open Telegram Bot 🚀</Text>
                                     </TouchableOpacity>
@@ -193,12 +193,12 @@ export default function SettingsScreen({ username, handleLogout, onOpenContextMa
             <TouchableOpacity style={styles.logoutFullBtn} onPress={handleLogout}>
                 <Text style={styles.logoutFullText}>Log out</Text>
             </TouchableOpacity>
-        </View>
+        </ScrollView>
     );
 }
 
 const styles = StyleSheet.create({
-    settingsContainer: { flex: 1, padding: 25 },
+    settingsContainer: { padding: 25, paddingBottom: 60 },
     settingsTitle: { fontSize: 28, fontWeight: '900', color: '#111827', textAlign: 'right', marginBottom: 30 },
     profileCard: { backgroundColor: '#fff', padding: 30, borderRadius: 24, alignItems: 'center', marginBottom: 30, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 10, elevation: 2 },
     avatarCircle: { width: 80, height: 80, borderRadius: 40, backgroundColor: '#dcfce7', justifyContent: 'center', alignItems: 'center', marginBottom: 15 },
@@ -213,7 +213,7 @@ const styles = StyleSheet.create({
     nestedItems: { backgroundColor: '#f9fafb', marginTop: 8, borderRadius: 12, overflow: 'hidden' },
     nestedItem: { backgroundColor: '#fff', padding: 16, paddingLeft: 24, borderBottomWidth: 1, borderBottomColor: '#f0f0f0', flexDirection: 'row-reverse', alignItems: 'center' },
     nestedItemText: { fontSize: 15, fontWeight: '500', color: '#6b7280' },
-    logoutFullBtn: { marginTop: 'auto', marginBottom: 100, backgroundColor: '#fee2e2', padding: 18, borderRadius: 16, alignItems: 'center' },
+    logoutFullBtn: { marginTop: 25, marginBottom: 40, backgroundColor: '#fee2e2', padding: 18, borderRadius: 16, alignItems: 'center' },
     logoutFullText: { color: '#ef4444', fontWeight: 'bold', fontSize: 16 },
     cardContainer: {
         backgroundColor: '#fff',

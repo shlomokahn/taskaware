@@ -21,5 +21,6 @@ urlpatterns = [
     path('profile/settings/', views.profile_settings, name='profile-settings'),
     path('profile/telegram-link-code/', views.generate_telegram_link_code, name='telegram-link-code'),
     path('telegram/webhook/', views.telegram_webhook, name='telegram-webhook'),
+    path('telegram/trigger-digests/', views.trigger_daily_digests, name='telegram-trigger-digests'),
     path('', include(router.urls)),
 ]

@@ -445,6 +445,7 @@ def evaluate_conditional_notifications(user, user_lat, user_lng):
 
         if search_result and search_result.get("places"):
             nearest_place = search_result["places"][0]
+            alert_sent = False
             
             if profile.expo_push_token:
                 if len(notify_list) == 1:
@@ -471,7 +472,49 @@ def evaluate_conditional_notifications(user, user_lat, user_lng):
                     title=title_message,
                     body=body_message
                 )
+                alert_sent = True
                 
+            if profile.telegram_chat_id:
+                if len(notify_list) == 1:
+                    task = notify_list[0]
+                    context_label = dict(UserContext.ContextKey.choices).get(task.required_context, task.required_context)
+                    context_name = context_label.lower() if context_label else "location"
+                    
+                    tg_text = f"📍 <b>Task location nearby!</b>\n\n"
+                    if task.context_condition == 'during':
+                        tg_text += f"While you are at {context_name}, there is a <b>{nearest_place['name']}</b> nearby ({nearest_place['address']}).\n"
+                    elif task.context_condition == 'before':
+                        tg_text += f"Before you start at {context_name}, there is a <b>{nearest_place['name']}</b> nearby ({nearest_place['address']}).\n"
+                    else:
+                        tg_text += f"Since you finished at {context_name}, there is a <b>{nearest_place['name']}</b> nearby ({nearest_place['address']}).\n"
+                    tg_text += f"\nDon't forget: <b>{task.title}</b>"
+                    
+                    reply_markup = {
+                        "inline_keyboard": [
+                            [
+                                {"text": "✓ Complete", "callback_data": f"complete_{task.id}"},
+                                {"text": "🔕 Mute", "callback_data": f"mute_{task.id}"}
+                            ]
+                        ]
+                    }
+                    send_telegram_message(profile.telegram_chat_id, tg_text, reply_markup=reply_markup)
+                else:
+                    tg_text = f"📍 <b>{nearest_place['name']}</b> nearby ({nearest_place['address']})\n"
+                    tg_text += f"You have <b>{len(notify_list)} tasks</b> nearby:\n\n"
+                    
+                    inline_keyboard = []
+                    for t in notify_list:
+                        tg_text += f"• <b>{t.title}</b>\n"
+                        inline_keyboard.append([
+                            {"text": f"✓ Complete: {t.title[:15]}...", "callback_data": f"complete_{t.id}"},
+                            {"text": f"🔕 Mute: {t.title[:15]}...", "callback_data": f"mute_{t.id}"}
+                        ])
+                    
+                    reply_markup = {"inline_keyboard": inline_keyboard}
+                    send_telegram_message(profile.telegram_chat_id, tg_text, reply_markup=reply_markup)
+                alert_sent = True
+                
+            if alert_sent:
                 # Update last notified positions
                 for task in notify_list:
                     task.last_notified_lat = user_lat
@@ -904,7 +947,7 @@ def google_place_details(request):
 
 # --- Telegram Bot Helper & Views ---
 
-def send_telegram_message(chat_id, text):
+def send_telegram_message(chat_id, text, reply_markup=None):
     token = os.environ.get("TELEGRAM_BOT_TOKEN") or "8453640532:AAErBXFHaIrZnpN_oi7H0gd1NJUXEkhriyo"
     if not token:
         print("TELEGRAM_BOT_TOKEN is not configured")
@@ -915,6 +958,8 @@ def send_telegram_message(chat_id, text):
         "text": text,
         "parse_mode": "HTML"
     }
+    if reply_markup is not None:
+        payload["reply_markup"] = reply_markup
     try:
         req = urllib.request.Request(
             url,
@@ -927,6 +972,144 @@ def send_telegram_message(chat_id, text):
                 print("Telegram API returned error:", res_data)
     except Exception as e:
         print("Failed to send telegram message:", str(e))
+
+
+def edit_telegram_message(chat_id, message_id, text, reply_markup=None):
+    token = os.environ.get("TELEGRAM_BOT_TOKEN") or "8453640532:AAErBXFHaIrZnpN_oi7H0gd1NJUXEkhriyo"
+    if not token:
+        print("TELEGRAM_BOT_TOKEN is not configured")
+        return
+    url = f"https://api.telegram.org/bot{token}/editMessageText"
+    payload = {
+        "chat_id": chat_id,
+        "message_id": message_id,
+        "text": text,
+        "parse_mode": "HTML"
+    }
+    if reply_markup is not None:
+        payload["reply_markup"] = reply_markup
+    try:
+        req = urllib.request.Request(
+            url,
+            data=json.dumps(payload).encode('utf-8'),
+            headers={'Content-Type': 'application/json'}
+        )
+        with urllib.request.urlopen(req, timeout=10) as response:
+            res_data = json.loads(response.read().decode('utf-8'))
+            if not res_data.get("ok"):
+                print("Telegram editMessageText returned error:", res_data)
+    except Exception as e:
+        print("Failed to edit telegram message:", str(e))
+
+
+def answer_telegram_callback(callback_id, text=None):
+    token = os.environ.get("TELEGRAM_BOT_TOKEN") or "8453640532:AAErBXFHaIrZnpN_oi7H0gd1NJUXEkhriyo"
+    if not token:
+        print("TELEGRAM_BOT_TOKEN is not configured")
+        return
+    url = f"https://api.telegram.org/bot{token}/answerCallbackQuery"
+    payload = {
+        "callback_query_id": callback_id,
+    }
+    if text:
+        payload["text"] = text
+    try:
+        req = urllib.request.Request(
+            url,
+            data=json.dumps(payload).encode('utf-8'),
+            headers={'Content-Type': 'application/json'}
+        )
+        with urllib.request.urlopen(req, timeout=10) as response:
+            res_data = json.loads(response.read().decode('utf-8'))
+            if not res_data.get("ok"):
+                print("Telegram answerCallbackQuery returned error:", res_data)
+    except Exception as e:
+        print("Failed to answer callback query:", str(e))
+
+
+def download_telegram_file(file_id):
+    token = os.environ.get("TELEGRAM_BOT_TOKEN") or "8453640532:AAErBXFHaIrZnpN_oi7H0gd1NJUXEkhriyo"
+    if not token:
+        print("TELEGRAM_BOT_TOKEN is not configured")
+        return None
+    
+    url = f"https://api.telegram.org/bot{token}/getFile?file_id={file_id}"
+    try:
+        req = urllib.request.Request(url)
+        with urllib.request.urlopen(req, timeout=15) as response:
+            res_data = json.loads(response.read().decode('utf-8'))
+            if not res_data.get("ok"):
+                print("Telegram getFile returned error:", res_data)
+                return None
+            file_path = res_data["result"]["file_path"]
+            
+        download_url = f"https://api.telegram.org/file/bot{token}/{file_path}"
+        download_req = urllib.request.Request(download_url)
+        with urllib.request.urlopen(download_req, timeout=25) as download_res:
+            return download_res.read()
+    except Exception as e:
+        print("Failed to download telegram file:", str(e))
+        return None
+
+
+def parse_voice_message_with_ai(audio_bytes):
+    gemini_key = os.environ.get("GEMINI_API_KEY")
+    if not gemini_key:
+        return None
+
+    try:
+        from google import genai
+        from google.genai import types
+        
+        client = genai.Client(api_key=gemini_key)
+        
+        prompt = f"""You are a smart assistant for a task management app.
+The user has provided a voice message (audio) in Hebrew or English.
+First, transcribe the voice message accurately.
+Second, analyze the transcription to extract structured task information.
+Return a valid JSON object ONLY. Do not write any markdown formatting, do not write ```json ... ```, do not write explanations.
+
+JSON Schema:
+{{
+  "title": "the task description / transcription in its original language (Hebrew or English) - clean, concise task title",
+  "locationQuery": "place type in English (e.g., supermarket, pharmacy, bank, post_office, cafe, gym, bakery, park, library, restaurant) or null if none",
+  "requiredContext": "context key if mentioned, else null (choices: 'work', 'home', 'school', 'gym')",
+  "contextCondition": "relation to context if mentioned, else null (choices: 'before', 'during', 'after')",
+  "dueDate": "ISO 8601 date time string if date/time is mentioned relative to current time, else null"
+}}
+
+Current Time Context: {timezone.now().isoformat()}
+
+Examples:
+- Audio saying "לקנות חלב אחרי העבודה" -> {{"title": "לקנות חלב אחרי העבודה", "locationQuery": "supermarket", "requiredContext": "work", "contextCondition": "after", "dueDate": null}}
+- Audio saying "לעשות אימון כושר מחר בבוקר" -> {{"title": "לעשות אימון כושר מחר בבוקר", "locationQuery": "gym", "requiredContext": "gym", "contextCondition": "during", "dueDate": "2026-06-07T08:00:00"}}
+- Audio saying "לקנות לחם בבוקר" -> {{"title": "לקנות לחם בבוקר", "locationQuery": "bakery", "requiredContext": null, "contextCondition": null, "dueDate": "2026-06-06T09:00:00"}}
+"""
+
+        audio_part = types.Part.from_bytes(
+            data=audio_bytes,
+            mime_type='audio/ogg',
+        )
+        
+        response = client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=[audio_part, prompt],
+        )
+        
+        response_text = response.text.strip()
+        if response_text.startswith("```"):
+            lines = response_text.splitlines()
+            if lines[0].startswith("```"):
+                lines = lines[1:]
+            if lines[-1].startswith("```"):
+                lines = lines[:-1]
+            response_text = "\n".join(lines).strip()
+            
+        parsed = json.loads(response_text)
+        return parsed
+    except Exception as e:
+        print("Error in parse_voice_message_with_ai:", str(e))
+        return None
 
 
 def fetch_ai_details_for_telegram(title, user):
@@ -1015,6 +1198,61 @@ def generate_telegram_link_code(request):
 @permission_classes([AllowAny])
 def telegram_webhook(request):
     data = request.data
+    
+    # 1. Handle Callback Queries (Inline button clicks)
+    if "callback_query" in data:
+        callback_query = data.get("callback_query")
+        callback_id = callback_query.get("id")
+        chat_id = callback_query.get("message", {}).get("chat", {}).get("id")
+        message_id = callback_query.get("message", {}).get("message_id")
+        callback_data = callback_query.get("data")
+        original_text = callback_query.get("message", {}).get("text", "")
+        
+        if not chat_id or not callback_data:
+            return Response({"status": "ignored"})
+            
+        profile = UserProfile.objects.filter(telegram_chat_id=str(chat_id)).first()
+        if not profile:
+            answer_telegram_callback(callback_id, "Account not linked!")
+            return Response({"status": "ignored"})
+            
+        if callback_data.startswith("complete_"):
+            try:
+                task_id = int(callback_data.replace("complete_", ""))
+                task = Task.objects.filter(user=profile.user, id=task_id).first()
+                if task:
+                    task.is_completed = True
+                    task.save(update_fields=['is_completed'])
+                    
+                    new_text = f"<s>{original_text}</s>\n\n✅ <b>Task Completed!</b>"
+                    edit_telegram_message(chat_id, message_id, new_text)
+                    answer_telegram_callback(callback_id, "Task marked as completed")
+                else:
+                    answer_telegram_callback(callback_id, "Task not found")
+            except Exception as e:
+                print("Error completing task via callback:", str(e))
+                answer_telegram_callback(callback_id, "Error completing task")
+                
+        elif callback_data.startswith("mute_"):
+            try:
+                task_id = int(callback_data.replace("mute_", ""))
+                task = Task.objects.filter(user=profile.user, id=task_id).first()
+                if task:
+                    task.is_muted = True
+                    task.save(update_fields=['is_muted'])
+                    
+                    new_text = f"{original_text}\n\n🔕 <b>Alert Muted</b>"
+                    edit_telegram_message(chat_id, message_id, new_text)
+                    answer_telegram_callback(callback_id, "Task alert muted")
+                else:
+                    answer_telegram_callback(callback_id, "Task not found")
+            except Exception as e:
+                print("Error muting task via callback:", str(e))
+                answer_telegram_callback(callback_id, "Error muting task")
+                
+        return Response({"status": "ok"})
+        
+    # 2. Handle Messages
     message = data.get("message")
     if not message:
         return Response({"status": "ignored"})
@@ -1024,12 +1262,60 @@ def telegram_webhook(request):
         return Response({"status": "ignored"})
         
     chat_id = chat.get("id")
-    text = message.get("text", "").strip()
     
+    # Process Voice Note
+    if "voice" in message:
+        voice = message["voice"]
+        file_id = voice.get("file_id")
+        
+        profile = UserProfile.objects.filter(telegram_chat_id=str(chat_id)).first()
+        if not profile:
+            send_telegram_message(chat_id, "❌ <b>Account not linked.</b> Please link your account from the App settings to start adding tasks.")
+            return Response({"status": "ok"})
+            
+        send_telegram_message(chat_id, "🎙️ <b>Processing voice message with AI...</b>")
+        
+        audio_bytes = download_telegram_file(file_id)
+        if not audio_bytes:
+            send_telegram_message(chat_id, "❌ <b>Failed to download voice note.</b> Please try again.")
+            return Response({"status": "ok"})
+            
+        ai_data = parse_voice_message_with_ai(audio_bytes)
+        if not ai_data or not ai_data.get("title"):
+            send_telegram_message(chat_id, "❌ <b>AI failed to parse your voice note.</b> Please speak clearly and try again.")
+            return Response({"status": "ok"})
+            
+        try:
+            due_date = None
+            due_date_str = ai_data.get("dueDate")
+            if due_date_str:
+                due_date = datetime.datetime.fromisoformat(due_date_str.replace("Z", "+00:00"))
+                
+            task = Task.objects.create(
+                user=profile.user,
+                title=ai_data.get("title"),
+                locationQuery=ai_data.get("locationQuery"),
+                required_context=ai_data.get("requiredContext"),
+                context_condition=ai_data.get("contextCondition"),
+                due_date=due_date
+            )
+            
+            loc_info = f"📍 {task.locationQuery}" if task.locationQuery else ""
+            due_info = f"⏰ {task.due_date.strftime('%d/%m/%y %H:%M')}" if task.due_date else ""
+            ctx_info = f"({task.required_context})" if task.required_context else ""
+            
+            send_telegram_message(chat_id, f"✅ <b>Task created via Voice!</b>\n\n📝 <b>{task.title}</b> {ctx_info}\n{due_info} {loc_info}")
+        except Exception as err:
+            print("Telegram voice task creation error:", str(err))
+            send_telegram_message(chat_id, "❌ <b>Error creating task from voice note.</b>")
+            
+        return Response({"status": "ok"})
+        
+    # Process text messages
+    text = message.get("text", "").strip()
     if not text:
         return Response({"status": "ignored"})
         
-    # Process commands
     if text.startswith("/start"):
         parts = text.split(" ")
         if len(parts) > 1 and parts[1].startswith("link_"):
@@ -1050,7 +1336,6 @@ def telegram_webhook(request):
             else:
                 send_telegram_message(chat_id, "❌ <b>Invalid or expired link code.</b>\nPlease generate a new code in the TaskAware app settings.")
         else:
-            # Standard start
             profile = UserProfile.objects.filter(telegram_chat_id=str(chat_id)).first()
             if profile:
                 send_telegram_message(chat_id, f"Welcome back to TaskAware, <b>{profile.user.username}</b>! You can type any task description here to add it.")
@@ -1058,22 +1343,72 @@ def telegram_webhook(request):
                 send_telegram_message(chat_id, "Welcome to <b>TaskAware Bot</b>! 📍\n\nTo start adding tasks, please link your account:\n1. Open settings in the TaskAware App.\n2. Tap 'Connect Telegram'.\n3. Copy the code or click the direct link.")
                 
     elif text == "/help":
-        send_telegram_message(chat_id, "💡 <b>How to use TaskAware Bot:</b>\n\n• Simply write any task (e.g. 'Buy milk tomorrow at 8 AM' or 'לקנות תרופות בסופר פארם').\n• Our AI will parse the title, context (home/work/gym), and suggested places (supermarket, pharmacy) and add it to your tasks list.\n\n<b>Commands:</b>\n• /start - Welcome & connection status\n• /tasks - Show your active tasks\n• /help - Display this help guide")
+        send_telegram_message(chat_id, "💡 <b>How to use TaskAware Bot:</b>\n\n• Simply write any task (e.g. 'Buy milk tomorrow at 8 AM' or 'לקנות תרופות בסופר פארם').\n• Our AI will parse the title, context (home/work/gym), and suggested places (supermarket, pharmacy) and add it to your tasks list.\n\n<b>Commands:</b>\n• /start - Welcome & connection status\n• /tasks - Show your active tasks\n• /today - Show active tasks grouped by context\n• /help - Display this help guide")
         
     elif text == "/tasks":
         profile = UserProfile.objects.filter(telegram_chat_id=str(chat_id)).first()
         if not profile:
             send_telegram_message(chat_id, "❌ <b>Account not linked.</b> Please connect your account in the App settings first.")
         else:
-            tasks = Task.objects.filter(user=profile.user, is_completed=False).order_by('due_date')[:10]
+            tasks = Task.objects.filter(user=profile.user, is_completed=False).order_by('due_date')
             if not tasks.exists():
                 send_telegram_message(chat_id, "🎉 You have no active tasks!")
             else:
-                msg = "📋 <b>Your Active Tasks:</b>\n\n"
+                msg = f"📋 <b>Your Active Tasks ({tasks.count()}):</b>\n\n"
                 for i, t in enumerate(tasks):
                     due_str = t.due_date.strftime("%d/%m/%y %H:%M") if t.due_date else "No reminder"
                     loc_str = f"📍 {t.locationQuery}" if t.locationQuery else ""
-                    msg += f"{i+1}. <b>{t.title}</b>\n   ⏰ {due_str} {loc_str}\n\n"
+                    ctx_str = f"({t.required_context})" if t.required_context else ""
+                    msg += f"{i+1}. <b>{t.title}</b> {ctx_str}\n   ⏰ {due_str} {loc_str}\n\n"
+                send_telegram_message(chat_id, msg)
+                
+    elif text == "/today":
+        profile = UserProfile.objects.filter(telegram_chat_id=str(chat_id)).first()
+        if not profile:
+            send_telegram_message(chat_id, "❌ <b>Account not linked.</b> Please connect your account in the App settings first.")
+        else:
+            tasks = Task.objects.filter(user=profile.user, is_completed=False)
+            if not tasks.exists():
+                send_telegram_message(chat_id, "🎉 You have no active tasks!")
+            else:
+                context_groups = {
+                    "home": [],
+                    "work": [],
+                    "school": [],
+                    "gym": [],
+                    "other": []
+                }
+                for t in tasks:
+                    ctx = t.required_context
+                    if ctx in context_groups:
+                        context_groups[ctx].append(t)
+                    else:
+                        context_groups["other"].append(t)
+                        
+                msg = "📅 <b>Today's Tasks by Context:</b>\n\n"
+                headers = {
+                    "home": "🏠 <b>Home Context</b>",
+                    "work": "💼 <b>Work Context</b>",
+                    "school": "🏫 <b>School Context</b>",
+                    "gym": "💪 <b>Gym Context</b>",
+                    "other": "📋 <b>General / Other Tasks</b>"
+                }
+                
+                has_content = False
+                for key in ["home", "work", "school", "gym", "other"]:
+                    group_tasks = context_groups[key]
+                    if group_tasks:
+                        has_content = True
+                        msg += f"{headers[key]}:\n"
+                        for t in group_tasks:
+                            due_str = f"⏰ {t.due_date.strftime('%H:%M')}" if t.due_date else ""
+                            loc_str = f"📍 {t.locationQuery}" if t.locationQuery else ""
+                            cond_str = f"({t.context_condition})" if t.context_condition else ""
+                            msg += f"• <b>{t.title}</b> {cond_str} {due_str} {loc_str}\n"
+                        msg += "\n"
+                        
+                if not has_content:
+                    msg = "🎉 You have no active tasks!"
                 send_telegram_message(chat_id, msg)
                  
     else:
@@ -1083,7 +1418,6 @@ def telegram_webhook(request):
             send_telegram_message(chat_id, "❌ <b>Account not linked.</b> Please link your account from the App settings to start adding tasks.")
         else:
             try:
-                # Reuse the AI logic
                 ai_data = fetch_ai_details_for_telegram(text, profile.user)
                 due_date = ai_data.get("dueDate")
                 
@@ -1106,3 +1440,72 @@ def telegram_webhook(request):
                 Task.objects.create(user=profile.user, title=text)
                  
     return Response({"status": "ok"})
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def trigger_daily_digests(request):
+    secret = os.environ.get("TELEGRAM_DIGEST_SECRET") or "taskaware-digest-secret-2026"
+    auth_header = request.headers.get("Authorization")
+    api_key = request.headers.get("X-Telegram-Digest-Key")
+    
+    authorized = False
+    if auth_header and auth_header.startswith("Bearer "):
+        token = auth_header.split(" ")[1]
+        if token == secret:
+            authorized = True
+    elif api_key == secret:
+        authorized = True
+        
+    if not authorized:
+        return Response({"error": "Unauthorized"}, status=status.HTTP_401_UNAUTHORIZED)
+        
+    profiles = UserProfile.objects.exclude(telegram_chat_id__isnull=True).exclude(telegram_chat_id='')
+    
+    sent_count = 0
+    for profile in profiles:
+        chat_id = profile.telegram_chat_id
+        tasks = Task.objects.filter(user=profile.user, is_completed=False)
+        if tasks.exists():
+            context_groups = {
+                "home": [],
+                "work": [],
+                "school": [],
+                "gym": [],
+                "other": []
+            }
+            for t in tasks:
+                ctx = t.required_context
+                if ctx in context_groups:
+                    context_groups[ctx].append(t)
+                else:
+                    context_groups["other"].append(t)
+            
+            msg = f"🌅 <b>Good morning, {profile.user.username}!</b>\nHere is your daily TaskAware digest:\n\n"
+            
+            headers = {
+                "home": "🏠 <b>Home Context</b>",
+                "work": "💼 <b>Work Context</b>",
+                "school": "🏫 <b>School Context</b>",
+                "gym": "💪 <b>Gym Context</b>",
+                "other": "📋 <b>General / Other Tasks</b>"
+            }
+            
+            has_content = False
+            for key in ["home", "work", "school", "gym", "other"]:
+                group_tasks = context_groups[key]
+                if group_tasks:
+                    has_content = True
+                    msg += f"{headers[key]}:\n"
+                    for t in group_tasks:
+                        due_str = f"⏰ {t.due_date.strftime('%H:%M')}" if t.due_date else ""
+                        loc_str = f"📍 {t.locationQuery}" if t.locationQuery else ""
+                        cond_str = f"({t.context_condition})" if t.context_condition else ""
+                        msg += f"• <b>{t.title}</b> {cond_str} {due_str} {loc_str}\n"
+                    msg += "\n"
+            
+            if has_content:
+                send_telegram_message(chat_id, msg)
+                sent_count += 1
+                
+    return Response({"status": "success", "sent_digests": sent_count}, status=status.HTTP_200_OK)
