@@ -71,6 +71,10 @@ class UserProfile(models.Model):
     notification_radius = models.IntegerField(default=300)
     muted_contexts = models.JSONField(default=list, blank=True)
 
+    telegram_chat_id = models.CharField(max_length=100, blank=True, null=True, unique=True)
+    telegram_link_code = models.CharField(max_length=10, blank=True, null=True)
+    telegram_link_code_expires = models.DateTimeField(blank=True, null=True)
+
     def __str__(self):
         return f"Profile for {self.user.username}"
 

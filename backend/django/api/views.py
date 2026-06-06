@@ -900,3 +900,209 @@ def google_place_details(request):
         'coords_lat': location.get('lat'),
         'coords_lng': location.get('lng'),
     })
+
+
+# --- Telegram Bot Helper & Views ---
+
+def send_telegram_message(chat_id, text):
+    token = os.environ.get("TELEGRAM_BOT_TOKEN") or "8453640532:AAErBXFHaIrZnpN_oi7H0gd1NJUXEkhriyo"
+    if not token:
+        print("TELEGRAM_BOT_TOKEN is not configured")
+        return
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    payload = {
+        "chat_id": chat_id,
+        "text": text,
+        "parse_mode": "HTML"
+    }
+    try:
+        req = urllib.request.Request(
+            url,
+            data=json.dumps(payload).encode('utf-8'),
+            headers={'Content-Type': 'application/json'}
+        )
+        with urllib.request.urlopen(req, timeout=10) as response:
+            res_data = json.loads(response.read().decode('utf-8'))
+            if not res_data.get("ok"):
+                print("Telegram API returned error:", res_data)
+    except Exception as e:
+        print("Failed to send telegram message:", str(e))
+
+
+def fetch_ai_details_for_telegram(title, user):
+    location_query = None
+    required_context = None
+    context_condition = None
+    due_date = None
+
+    gemini_key = os.environ.get("GEMINI_API_KEY")
+    if not gemini_key:
+        return {"locationQuery": None, "requiredContext": None, "contextCondition": None, "dueDate": None}
+
+    try:
+        from google import genai
+        client = genai.Client(api_key=gemini_key)
+        
+        prompt = f"""You are a smart assistant for a task management app. The user will give you a task description in Hebrew or English.
+Analyze it and return a valid JSON object ONLY. Do not write any markdown formatting, do not write ```json ... ```, do not write explanations.
+
+Task: '{title}'
+
+JSON Schema:
+{{
+  "locationQuery": "place type in English (e.g., supermarket, pharmacy, bank, post_office, cafe, gym, post_office, bakery, park, library, restaurant)",
+  "requiredContext": "context key if mentioned, else null (choices: 'work', 'home', 'school', 'gym')",
+  "contextCondition": "relation to context if mentioned, else null (choices: 'before', 'during', 'after')",
+  "dueDate": "ISO 8601 date time string if date/time is mentioned relative to current time, else null"
+}}
+
+Current Time Context: {timezone.now().isoformat()}
+
+Examples:
+- "לקנות חלב אחרי העבודה" -> {{"locationQuery": "supermarket", "requiredContext": "work", "contextCondition": "after", "dueDate": null}}
+- "לעשות אימון כושר" -> {{"locationQuery": "gym", "requiredContext": "gym", "contextCondition": "during", "dueDate": null}}
+- "לקנות לחם" -> {{"locationQuery": "bakery", "requiredContext": null, "contextCondition": null, "dueDate": null}}
+- "פגישה עם דני מחר ב-10 בבוקר" -> {{"locationQuery": null, "requiredContext": null, "contextCondition": null, "dueDate": "2026-06-07T10:00:00"}}
+"""
+        response = client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=prompt,
+        )
+        response_text = response.text.strip()
+        if response_text.startswith("```"):
+            lines = response_text.splitlines()
+            if lines[0].startswith("```"):
+                lines = lines[1:]
+            if lines[-1].startswith("```"):
+                lines = lines[:-1]
+            response_text = "\n".join(lines).strip()
+            
+        parsed = json.loads(response_text)
+        location_query = parsed.get("locationQuery")
+        required_context = parsed.get("requiredContext")
+        context_condition = parsed.get("contextCondition")
+        due_date_str = parsed.get("dueDate")
+        
+        if due_date_str:
+            due_date = timezone.datetime.fromisoformat(due_date_str.replace("Z", "+00:00"))
+            
+    except Exception as e:
+        print("Error in fetch_ai_details_for_telegram:", str(e))
+        
+    return {
+        "locationQuery": location_query,
+        "requiredContext": required_context,
+        "contextCondition": context_condition,
+        "dueDate": due_date
+    }
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def generate_telegram_link_code(request):
+    import random
+    code = str(random.randint(1000, 9999))
+    
+    profile, _ = UserProfile.objects.get_or_create(user=request.user)
+    profile.telegram_link_code = code
+    profile.telegram_link_code_expires = timezone.now() + timezone.timedelta(minutes=10)
+    profile.save()
+    
+    return Response({"code": code}, status=status.HTTP_200_OK)
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def telegram_webhook(request):
+    data = request.data
+    message = data.get("message")
+    if not message:
+        return Response({"status": "ignored"})
+        
+    chat = message.get("chat")
+    if not chat:
+        return Response({"status": "ignored"})
+        
+    chat_id = chat.get("id")
+    text = message.get("text", "").strip()
+    
+    if not text:
+        return Response({"status": "ignored"})
+        
+    # Process commands
+    if text.startswith("/start"):
+        parts = text.split(" ")
+        if len(parts) > 1 and parts[1].startswith("link_"):
+            code = parts[1].replace("link_", "").strip()
+            
+            profile = UserProfile.objects.filter(
+                telegram_link_code=code,
+                telegram_link_code_expires__gt=timezone.now()
+            ).first()
+            
+            if profile:
+                profile.telegram_chat_id = str(chat_id)
+                profile.telegram_link_code = None
+                profile.telegram_link_code_expires = None
+                profile.save()
+                
+                send_telegram_message(chat_id, f"🎉 <b>Connected successfully!</b>\nYour Telegram account is now linked to TaskAware user: <b>{profile.user.username}</b>.\n\nYou can start adding tasks directly by typing them here (e.g. 'Buy milk tomorrow morning').")
+            else:
+                send_telegram_message(chat_id, "❌ <b>Invalid or expired link code.</b>\nPlease generate a new code in the TaskAware app settings.")
+        else:
+            # Standard start
+            profile = UserProfile.objects.filter(telegram_chat_id=str(chat_id)).first()
+            if profile:
+                send_telegram_message(chat_id, f"Welcome back to TaskAware, <b>{profile.user.username}</b>! You can type any task description here to add it.")
+            else:
+                send_telegram_message(chat_id, "Welcome to <b>TaskAware Bot</b>! 📍\n\nTo start adding tasks, please link your account:\n1. Open settings in the TaskAware App.\n2. Tap 'Connect Telegram'.\n3. Copy the code or click the direct link.")
+                
+    elif text == "/help":
+        send_telegram_message(chat_id, "💡 <b>How to use TaskAware Bot:</b>\n\n• Simply write any task (e.g. 'Buy milk tomorrow at 8 AM' or 'לקנות תרופות בסופר פארם').\n• Our AI will parse the title, context (home/work/gym), and suggested places (supermarket, pharmacy) and add it to your tasks list.\n\n<b>Commands:</b>\n• /start - Welcome & connection status\n• /tasks - Show your active tasks\n• /help - Display this help guide")
+        
+    elif text == "/tasks":
+        profile = UserProfile.objects.filter(telegram_chat_id=str(chat_id)).first()
+        if not profile:
+            send_telegram_message(chat_id, "❌ <b>Account not linked.</b> Please connect your account in the App settings first.")
+        else:
+            tasks = Task.objects.filter(user=profile.user, is_completed=False).order_by('due_date')[:10]
+            if not tasks.exists():
+                send_telegram_message(chat_id, "🎉 You have no active tasks!")
+            else:
+                msg = "📋 <b>Your Active Tasks:</b>\n\n"
+                for i, t in enumerate(tasks):
+                    due_str = t.due_date.strftime("%d/%m/%y %H:%M") if t.due_date else "No reminder"
+                    loc_str = f"📍 {t.locationQuery}" if t.locationQuery else ""
+                    msg += f"{i+1}. <b>{t.title}</b>\n   ⏰ {due_str} {loc_str}\n\n"
+                send_telegram_message(chat_id, msg)
+                 
+    else:
+        # Free text -> Create task
+        profile = UserProfile.objects.filter(telegram_chat_id=str(chat_id)).first()
+        if not profile:
+            send_telegram_message(chat_id, "❌ <b>Account not linked.</b> Please link your account from the App settings to start adding tasks.")
+        else:
+            try:
+                # Reuse the AI logic
+                ai_data = fetch_ai_details_for_telegram(text, profile.user)
+                due_date = ai_data.get("dueDate")
+                
+                task = Task.objects.create(
+                    user=profile.user,
+                    title=text,
+                    locationQuery=ai_data.get("locationQuery"),
+                    required_context=ai_data.get("requiredContext"),
+                    context_condition=ai_data.get("contextCondition"),
+                    due_date=due_date
+                )
+                
+                loc_info = f"📍 {task.locationQuery}" if task.locationQuery else ""
+                due_info = f"⏰ {task.due_date.strftime('%d/%m/%y %H:%M')}" if task.due_date else ""
+                
+                send_telegram_message(chat_id, f"✅ <b>Task created!</b>\n\n📝 <b>{task.title}</b>\n{due_info} {loc_info}")
+            except Exception as err:
+                print("Telegram task creation error:", str(err))
+                send_telegram_message(chat_id, f"❌ Failed to parse task automatically, saving as basic task:\n\n📝 <b>{text}</b>")
+                Task.objects.create(user=profile.user, title=text)
+                 
+    return Response({"status": "ok"})

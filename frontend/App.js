@@ -463,6 +463,8 @@ export default function App() {
                 handleLogout={handleLogout}
                 onOpenContextManager={() => setShowContextManager(true)}
                 onOpenNotificationSettings={() => setShowNotificationSettings(true)}
+                token={token}
+                API_BASE={API_BASE}
             />
         );
     };
