@@ -60,6 +60,15 @@ export default function UpdateChecker({ API_BASE }) {
     const handleUpdate = async (updateData) => {
         setIsDownloading(true);
         try {
+            if (__DEV__) {
+                Alert.alert(
+                    'Simulated Update',
+                    'OTA updates are simulated and not supported in development mode (Expo Go / Metro). Your local bundle already has the latest code changes!',
+                    [{ text: 'OK', onPress: () => setShowUpdateModal(false) }]
+                );
+                return;
+            }
+
             // Use Expo Updates to fetch and apply the update
             const update = await Updates.checkForUpdateAsync();
 
