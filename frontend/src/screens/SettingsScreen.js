@@ -665,44 +665,46 @@ export default function SettingsScreen({
             >
                 <View style={styles.modalOverlay}>
                     <KeyboardAvoidingView 
-                        behavior={Platform.OS === 'ios' ? 'padding' : undefined} 
+                        behavior={Platform.OS === 'ios' ? 'padding' : 'padding'} 
                         style={styles.modalContent}
                     >
-                        <Text style={styles.modalTitle}>Change Username</Text>
-                        <Text style={styles.modalSubtitle}>Choose a new unique username for your account.</Text>
-                        
-                        <TextInput
-                            style={styles.modalInput}
-                            placeholder="New Username"
-                            placeholderTextColor="#9ca3af"
-                            value={newUsername}
-                            onChangeText={setNewUsername}
-                            autoCapitalize="none"
-                            autoCorrect={false}
-                        />
-                        
-                        {usernameError ? <Text style={styles.modalError}>{usernameError}</Text> : null}
-                        
-                        <View style={styles.modalButtons}>
-                            <TouchableOpacity 
-                                style={[styles.modalBtn, styles.cancelBtn]} 
-                                onPress={() => setUsernameModalVisible(false)}
-                                disabled={isSavingUsername}
-                            >
-                                <Text style={styles.cancelBtnText}>Cancel</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity 
-                                style={[styles.modalBtn, styles.saveBtn]} 
-                                onPress={handleSaveUsername}
-                                disabled={isSavingUsername}
-                            >
-                                {isSavingUsername ? (
-                                    <ActivityIndicator size="small" color="#fff" />
-                                ) : (
-                                    <Text style={styles.saveBtnText}>Save Changes</Text>
-                                )}
-                            </TouchableOpacity>
-                        </View>
+                        <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ flexGrow: 1 }}>
+                            <Text style={styles.modalTitle}>Change Username</Text>
+                            <Text style={styles.modalSubtitle}>Choose a new unique username for your account.</Text>
+                            
+                            <TextInput
+                                style={styles.modalInput}
+                                placeholder="New Username"
+                                placeholderTextColor="#9ca3af"
+                                value={newUsername}
+                                onChangeText={setNewUsername}
+                                autoCapitalize="none"
+                                autoCorrect={false}
+                            />
+                            
+                            {usernameError ? <Text style={styles.modalError}>{usernameError}</Text> : null}
+                            
+                            <View style={styles.modalButtons}>
+                                <TouchableOpacity 
+                                    style={[styles.modalBtn, styles.cancelBtn]} 
+                                    onPress={() => setUsernameModalVisible(false)}
+                                    disabled={isSavingUsername}
+                                >
+                                    <Text style={styles.cancelBtnText}>Cancel</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity 
+                                    style={[styles.modalBtn, styles.saveBtn]} 
+                                    onPress={handleSaveUsername}
+                                    disabled={isSavingUsername}
+                                >
+                                    {isSavingUsername ? (
+                                        <ActivityIndicator size="small" color="#fff" />
+                                    ) : (
+                                        <Text style={styles.saveBtnText}>Save Changes</Text>
+                                    )}
+                                </TouchableOpacity>
+                            </View>
+                        </ScrollView>
                     </KeyboardAvoidingView>
                 </View>
             </Modal>
@@ -716,61 +718,63 @@ export default function SettingsScreen({
             >
                 <View style={styles.modalOverlay}>
                     <KeyboardAvoidingView 
-                        behavior={Platform.OS === 'ios' ? 'padding' : undefined} 
+                        behavior={Platform.OS === 'ios' ? 'padding' : 'padding'} 
                         style={styles.modalContent}
                     >
-                        <Text style={styles.modalTitle}>Change Password</Text>
-                        <Text style={styles.modalSubtitle}>Please verify your current password and type a new password.</Text>
-                        
-                        <TextInput
-                            style={styles.modalInput}
-                            placeholder="Current Password"
-                            placeholderTextColor="#9ca3af"
-                            secureTextEntry={true}
-                            value={currentPassword}
-                            onChangeText={setCurrentPassword}
-                        />
+                        <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ flexGrow: 1 }}>
+                            <Text style={styles.modalTitle}>Change Password</Text>
+                            <Text style={styles.modalSubtitle}>Please verify your current password and type a new password.</Text>
+                            
+                            <TextInput
+                                style={styles.modalInput}
+                                placeholder="Current Password"
+                                placeholderTextColor="#9ca3af"
+                                secureTextEntry={true}
+                                value={currentPassword}
+                                onChangeText={setCurrentPassword}
+                            />
 
-                        <TextInput
-                            style={styles.modalInput}
-                            placeholder="New Password"
-                            placeholderTextColor="#9ca3af"
-                            secureTextEntry={true}
-                            value={newPassword}
-                            onChangeText={setNewPassword}
-                        />
+                            <TextInput
+                                style={styles.modalInput}
+                                placeholder="New Password"
+                                placeholderTextColor="#9ca3af"
+                                secureTextEntry={true}
+                                value={newPassword}
+                                onChangeText={setNewPassword}
+                            />
 
-                        <TextInput
-                            style={styles.modalInput}
-                            placeholder="Confirm New Password"
-                            placeholderTextColor="#9ca3af"
-                            secureTextEntry={true}
-                            value={confirmPassword}
-                            onChangeText={setConfirmPassword}
-                        />
-                        
-                        {passwordError ? <Text style={styles.modalError}>{passwordError}</Text> : null}
-                        
-                        <View style={styles.modalButtons}>
-                            <TouchableOpacity 
-                                style={[styles.modalBtn, styles.cancelBtn]} 
-                                onPress={() => setPasswordModalVisible(false)}
-                                disabled={isSavingPassword}
-                            >
-                                <Text style={styles.cancelBtnText}>Cancel</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity 
-                                style={[styles.modalBtn, styles.saveBtn]} 
-                                onPress={handleSavePassword}
-                                disabled={isSavingPassword}
-                            >
-                                {isSavingPassword ? (
-                                    <ActivityIndicator size="small" color="#fff" />
-                                ) : (
-                                    <Text style={styles.saveBtnText}>Update Password</Text>
-                                )}
-                            </TouchableOpacity>
-                        </View>
+                            <TextInput
+                                style={styles.modalInput}
+                                placeholder="Confirm New Password"
+                                placeholderTextColor="#9ca3af"
+                                secureTextEntry={true}
+                                value={confirmPassword}
+                                onChangeText={setConfirmPassword}
+                            />
+                            
+                            {passwordError ? <Text style={styles.modalError}>{passwordError}</Text> : null}
+                            
+                            <View style={styles.modalButtons}>
+                                <TouchableOpacity 
+                                    style={[styles.modalBtn, styles.cancelBtn]} 
+                                    onPress={() => setPasswordModalVisible(false)}
+                                    disabled={isSavingPassword}
+                                >
+                                    <Text style={styles.cancelBtnText}>Cancel</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity 
+                                    style={[styles.modalBtn, styles.saveBtn]} 
+                                    onPress={handleSavePassword}
+                                    disabled={isSavingPassword}
+                                >
+                                    {isSavingPassword ? (
+                                        <ActivityIndicator size="small" color="#fff" />
+                                    ) : (
+                                        <Text style={styles.saveBtnText}>Update Password</Text>
+                                    )}
+                                </TouchableOpacity>
+                            </View>
+                        </ScrollView>
                     </KeyboardAvoidingView>
                 </View>
             </Modal>
@@ -1077,6 +1081,7 @@ const styles = StyleSheet.create({
     },
     modalContent: {
         width: '100%',
+        maxHeight: '85%',
         backgroundColor: '#ffffff',
         borderRadius: 24,
         padding: 24,
