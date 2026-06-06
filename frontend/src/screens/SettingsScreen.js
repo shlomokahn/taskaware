@@ -15,6 +15,7 @@ import {
     Platform 
 } from 'react-native';
 import * as Updates from 'expo-updates';
+import Constants from 'expo-constants';
 import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -314,27 +315,59 @@ export default function SettingsScreen({
     const handleCheckUpdate = async () => {
         setIsCheckingUpdate(true);
         try {
-            const update = await Updates.checkForUpdateAsync();
-            if (update.isAvailable) {
-                Alert.alert(
-                    'Update Available',
-                    'A new version is available. Download and install now?',
-                    [
-                        { text: 'Later', onPress: () => setIsCheckingUpdate(false) },
-                        {
-                            text: 'Update',
-                            onPress: async () => {
-                                await Updates.fetchUpdateAsync();
-                                await Updates.reloadAsync();
+            const currentVersion = Constants?.expoConfig?.version || '1.0.1';
+            const response = await fetch(
+                `${API_BASE}/api/check-update/?current_version=${currentVersion}`
+            );
+
+            if (!response.ok) {
+                throw new Error('Server returned error status');
+            }
+
+            const data = await response.json();
+
+            if (data.update_available) {
+                if (__DEV__) {
+                    Alert.alert(
+                        'Update Available (Simulated)',
+                        `Version ${data.version} is available. OTA updates are disabled in development mode.\n\nRelease Notes:\n${data.release_notes}`,
+                        [{ text: 'OK', onPress: () => setIsCheckingUpdate(false) }]
+                    );
+                    return;
+                }
+
+                const update = await Updates.checkForUpdateAsync();
+                if (update.isAvailable) {
+                    Alert.alert(
+                        'Update Available',
+                        `Version ${data.version} is available. Download and install now?\n\nRelease Notes:\n${data.release_notes}`,
+                        [
+                            { text: 'Later', onPress: () => setIsCheckingUpdate(false) },
+                            {
+                                text: 'Update',
+                                onPress: async () => {
+                                    try {
+                                        await Updates.fetchUpdateAsync();
+                                        await Updates.reloadAsync();
+                                    } catch (err) {
+                                        Alert.alert('Error', 'Failed to download update.');
+                                    } finally {
+                                        setIsCheckingUpdate(false);
+                                    }
+                                }
                             }
-                        }
-                    ]
-                );
+                        ]
+                    );
+                } else {
+                    Alert.alert('Up to Date', 'You are running the latest version.');
+                    setIsCheckingUpdate(false);
+                }
             } else {
                 Alert.alert('Up to Date', 'You are running the latest version.');
                 setIsCheckingUpdate(false);
             }
         } catch (error) {
+            console.error('Check update error:', error);
             Alert.alert('Error', 'Failed to check for updates.');
             setIsCheckingUpdate(false);
         }
@@ -632,7 +665,7 @@ export default function SettingsScreen({
             >
                 <View style={styles.modalOverlay}>
                     <KeyboardAvoidingView 
-                        behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
+                        behavior={Platform.OS === 'ios' ? 'padding' : undefined} 
                         style={styles.modalContent}
                     >
                         <Text style={styles.modalTitle}>Change Username</Text>
@@ -683,7 +716,7 @@ export default function SettingsScreen({
             >
                 <View style={styles.modalOverlay}>
                     <KeyboardAvoidingView 
-                        behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
+                        behavior={Platform.OS === 'ios' ? 'padding' : undefined} 
                         style={styles.modalContent}
                     >
                         <Text style={styles.modalTitle}>Change Password</Text>
