@@ -147,13 +147,20 @@ class UserProfileSerializer(serializers.ModelSerializer):
     isWhatsappLinked = serializers.SerializerMethodField()
     telegramChatId = serializers.CharField(source='telegram_chat_id', required=False, allow_null=True, allow_blank=True)
     whatsappNumber = serializers.CharField(source='whatsapp_number', required=False, allow_null=True, allow_blank=True)
+    
+    # New fields for profile updates
+    username = serializers.CharField(required=False)
+    currentPassword = serializers.CharField(required=False, write_only=True)
+    newPassword = serializers.CharField(required=False, write_only=True)
+    profilePicture = serializers.CharField(source='profile_picture', required=False, allow_null=True, allow_blank=True)
 
     class Meta:
         model = UserProfile
         fields = [
             'notificationsEnabled', 'dndEnabled', 'dndStart', 'dndEnd', 
             'notificationRadius', 'mutedContexts', 'isTelegramLinked', 'isWhatsappLinked',
-            'telegramChatId', 'whatsappNumber'
+            'telegramChatId', 'whatsappNumber',
+            'username', 'currentPassword', 'newPassword', 'profilePicture'
         ]
 
     def get_isTelegramLinked(self, obj):
@@ -161,3 +168,38 @@ class UserProfileSerializer(serializers.ModelSerializer):
 
     def get_isWhatsappLinked(self, obj):
         return bool(obj.whatsapp_number)
+
+    def to_representation(self, instance):
+        ret = super().to_representation(instance)
+        # Expose the user's username
+        ret['username'] = instance.user.username
+        return ret
+
+    def update(self, instance, validated_data):
+        # Handle username update
+        username = validated_data.pop('username', None)
+        if username:
+            username = username.strip()
+            if not username:
+                raise serializers.ValidationError({"username": "Username cannot be empty."})
+            user = instance.user
+            if username != user.username:
+                if User.objects.filter(username__iexact=username).exclude(id=user.id).exists():
+                    raise serializers.ValidationError({"username": "Username already exists."})
+                user.username = username
+                user.save()
+
+        # Handle password update
+        current_password = validated_data.pop('currentPassword', None)
+        new_password = validated_data.pop('newPassword', None)
+        if current_password or new_password:
+            if not current_password or not new_password:
+                raise serializers.ValidationError({"detail": "Both current password and new password are required to change password."})
+            user = instance.user
+            if not user.check_password(current_password):
+                raise serializers.ValidationError({"currentPassword": "Incorrect current password."})
+            user.set_password(new_password)
+            user.save()
+
+        # Save remaining profile fields
+        return super().update(instance, validated_data)

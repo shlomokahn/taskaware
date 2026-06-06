@@ -460,6 +460,7 @@ export default function App() {
         return (
             <SettingsScreen
                 username={username}
+                setUsername={setUsername}
                 handleLogout={handleLogout}
                 onOpenContextManager={() => setShowContextManager(true)}
                 onOpenNotificationSettings={() => setShowNotificationSettings(true)}
