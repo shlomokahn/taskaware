@@ -984,7 +984,7 @@ Examples:
         due_date_str = parsed.get("dueDate")
         
         if due_date_str:
-            due_date = timezone.datetime.fromisoformat(due_date_str.replace("Z", "+00:00"))
+            due_date = datetime.datetime.fromisoformat(due_date_str.replace("Z", "+00:00"))
             
     except Exception as e:
         print("Error in fetch_ai_details_for_telegram:", str(e))
@@ -1005,7 +1005,7 @@ def generate_telegram_link_code(request):
     
     profile, _ = UserProfile.objects.get_or_create(user=request.user)
     profile.telegram_link_code = code
-    profile.telegram_link_code_expires = timezone.now() + timezone.timedelta(minutes=10)
+    profile.telegram_link_code_expires = timezone.now() + datetime.timedelta(minutes=10)
     profile.save()
     
     return Response({"code": code}, status=status.HTTP_200_OK)
