@@ -135,6 +135,19 @@ class UserContextSerializer(serializers.ModelSerializer):
         model = UserContext
         fields = ['id', 'key', 'value', 'coords_lat', 'coords_lng', 'metadata', 'confidence', 'source', 'last_updated']
 
+    def to_internal_value(self, data):
+        # Create a mutable copy of data if possible
+        data = data.copy() if hasattr(data, 'copy') else dict(data)
+        for field in ['coords_lat', 'coords_lng']:
+            if field in data and data[field] is not None:
+                try:
+                    val = float(data[field])
+                    # Round to 6 decimal places to satisfy DecimalField constraints
+                    data[field] = round(val, 6)
+                except (ValueError, TypeError):
+                    pass
+        return super().to_internal_value(data)
+
 
 class UserProfileSerializer(serializers.ModelSerializer):
     notificationsEnabled = serializers.BooleanField(source='notifications_enabled', required=False)

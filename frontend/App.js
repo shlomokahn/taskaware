@@ -434,6 +434,12 @@ function AppContent() {
 
     const saveUserContext = async (contextKey, value, hours, place) => {
         try {
+            const formatCoords = (val) => {
+                if (val == null) return null;
+                const num = parseFloat(val);
+                return isNaN(num) ? null : parseFloat(num.toFixed(6));
+            };
+
             const hasCoords = place?.coords_lat != null && place?.coords_lng != null;
             const res = await fetch(`${API_BASE}/api/user-context/`, {
                 method: 'POST',
@@ -441,8 +447,8 @@ function AppContent() {
                 body: JSON.stringify({
                     key: contextKey,
                     value,
-                    coords_lat: hasCoords ? place.coords_lat : null,
-                    coords_lng: hasCoords ? place.coords_lng : null,
+                    coords_lat: hasCoords ? formatCoords(place.coords_lat) : null,
+                    coords_lng: hasCoords ? formatCoords(place.coords_lng) : null,
                     metadata: hours ? { hours } : null,
                     source: hasCoords ? 'google_places' : 'user',
                     confidence: 1.0,

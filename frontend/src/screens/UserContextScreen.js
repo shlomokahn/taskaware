@@ -392,12 +392,18 @@ export default function UserContextScreen({ token, API_BASE, onClose }) {
                                 : `${API_BASE}/api/user-context/${editingContext.id}/`;
                             const method = isNew ? 'POST' : 'PATCH';
                             
+                            const formatCoords = (val) => {
+                                if (val == null) return null;
+                                const num = parseFloat(val);
+                                return isNaN(num) ? null : parseFloat(num.toFixed(6));
+                            };
+
                             const hasCoords = selectedPlace?.coords_lat != null && selectedPlace?.coords_lng != null;
                             const payload = {
                                 key: editingContext.key,
                                 value,
-                                coords_lat: hasCoords ? selectedPlace.coords_lat : editingContext.coords_lat || null,
-                                coords_lng: hasCoords ? selectedPlace.coords_lng : editingContext.coords_lng || null,
+                                coords_lat: hasCoords ? formatCoords(selectedPlace.coords_lat) : formatCoords(editingContext.coords_lat),
+                                coords_lng: hasCoords ? formatCoords(selectedPlace.coords_lng) : formatCoords(editingContext.coords_lng),
                                 metadata: hours ? { hours } : {},
                                 source: hasCoords ? 'google_places' : editingContext.source || 'user',
                                 confidence: 1.0,
