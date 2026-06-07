@@ -3,8 +3,32 @@ import * as Location from 'expo-location';
 
 export const useLocationSync = (API_BASE, token) => {
     const [location, setLocation] = useState(null);
+    const [locationName, setLocationName] = useState('');
     const [isSyncing, setIsSyncing] = useState(false);
     const subscriptionRef = useRef(null);
+
+    const getAddressName = async (latitude, longitude) => {
+        try {
+            const geocode = await Location.reverseGeocodeAsync({ latitude, longitude });
+            if (geocode && geocode.length > 0) {
+                const item = geocode[0];
+                const parts = [];
+                if (item.street) {
+                    parts.push(item.street + (item.streetNumber ? ` ${item.streetNumber}` : ''));
+                }
+                if (item.city) {
+                    parts.push(item.city);
+                }
+                if (parts.length === 0 && item.name) {
+                    parts.push(item.name);
+                }
+                return parts.join(', ') || 'Unknown Location';
+            }
+        } catch (error) {
+            console.log('Error reverse geocoding location:', error);
+        }
+        return `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
+    };
 
     const syncLocation = async () => {
         if (!token) return { success: false, error: 'No token' };
@@ -32,6 +56,10 @@ export const useLocationSync = (API_BASE, token) => {
             });
 
             setLocation(loc);
+
+            // Resolve geocode address name
+            const addressName = await getAddressName(loc.coords.latitude, loc.coords.longitude);
+            setLocationName(addressName);
 
             const res = await fetch(`${API_BASE}/api/location/`, {
                 method: 'PATCH',
@@ -92,6 +120,9 @@ export const useLocationSync = (API_BASE, token) => {
                         console.log('📍 Foreground location moved > 150m, syncing...');
                         setLocation(newLoc);
 
+                        const addressName = await getAddressName(newLoc.coords.latitude, newLoc.coords.longitude);
+                        setLocationName(addressName);
+
                         try {
                             await fetch(`${API_BASE}/api/location/`, {
                                 method: 'PATCH',
@@ -125,5 +156,5 @@ export const useLocationSync = (API_BASE, token) => {
         };
     }, [token, API_BASE]);
 
-    return { location, syncLocation, isSyncing };
+    return { location, locationName, syncLocation, isSyncing };
 };

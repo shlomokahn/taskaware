@@ -99,7 +99,7 @@ function AppContent() {
     const [token, setToken] = useState(null);
     const [username, setUsername] = useState('');
 
-    const { location, syncLocation, isSyncing } = useLocationSync(API_BASE, token);
+    const { location, locationName, syncLocation, isSyncing } = useLocationSync(API_BASE, token);
 
     useEffect(() => {
         Notifications.cancelAllScheduledNotificationsAsync();
@@ -430,6 +430,7 @@ function AppContent() {
             setSelectedTask={setSelectedTask}
             formatDisplayDate={formatDisplayDate}
             currentLocation={location}
+            currentLocationName={locationName}
             token={token}
             API_BASE={API_BASE}
             onToggleTaskComplete={handleToggleTaskComplete}

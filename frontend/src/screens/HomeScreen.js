@@ -9,6 +9,7 @@ export default function HomeScreen({
     setSelectedTask, 
     formatDisplayDate,
     currentLocation,
+    currentLocationName,
     token,
     API_BASE,
     onToggleTaskComplete,
@@ -192,9 +193,9 @@ export default function HomeScreen({
                 <View style={styles.locationInfo}>
                     <Text style={styles.locationLabel}>Device Location</Text>
                     <Text style={styles.locationCoords}>
-                        {currentLocation?.coords 
+                        {currentLocationName || (currentLocation?.coords 
                             ? `${currentLocation.coords.latitude.toFixed(4)}, ${currentLocation.coords.longitude.toFixed(4)}`
-                            : 'Acquiring location...'}
+                            : 'Acquiring location...')}
                     </Text>
                 </View>
                 <TouchableOpacity 
