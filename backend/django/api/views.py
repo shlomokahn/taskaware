@@ -45,24 +45,168 @@ GOOGLE_PLACE_CATALOG = {
 
 
 TASK_PLACE_HINTS = {
+    # supermarket
     "חלב": "supermarket",
+    "גבינה": "supermarket",
+    "קוטג'": "supermarket",
+    "שמפו": "supermarket",
+    "סבון": "supermarket",
+    "ביצים": "supermarket",
+    "לחם": "supermarket",
     "קניות": "supermarket",
     "מכולת": "supermarket",
     "סופר": "supermarket",
+    "סופרמרקט": "supermarket",
+    "ירקות": "supermarket",
+    "פירות": "supermarket",
+    "בשר": "supermarket",
+    "עוף": "supermarket",
+    "אוכל": "supermarket",
+    "מעדניה": "supermarket",
+    "מעדנייה": "supermarket",
+    "קורנפלקס": "supermarket",
+    "חטיף": "supermarket",
+    "חטיפים": "supermarket",
+    "שוקולד": "supermarket",
+    
+    # pharmacy
     "תרופה": "pharmacy",
     "תרופות": "pharmacy",
     "בית מרקחת": "pharmacy",
+    "בית-מרקחת": "pharmacy",
+    "פארם": "pharmacy",
+    "סופרפארם": "pharmacy",
+    "סופר-פארם": "pharmacy",
+    "מרשם": "pharmacy",
+    "אקמול": "pharmacy",
+    "אדוויל": "pharmacy",
+    "נוירופן": "pharmacy",
+    "חבישה": "pharmacy",
+    "אספירין": "pharmacy",
+    "פלסטר": "pharmacy",
+    "ויטמינים": "pharmacy",
+    
+    # post_office
     "דואר": "post_office",
     "חבילה": "post_office",
+    "מכתב": "post_office",
+    "בולים": "post_office",
+    "משלוח": "post_office",
+    "דואר ישראל": "post_office",
+    "מכתבים": "post_office",
+    "חבילות": "post_office",
+    
+    # gym
     "אימון": "gym",
     "כושר": "gym",
+    "חדר כושר": "gym",
+    "חדר-כושר": "gym",
+    "ספורט": "gym",
+    "ריצה": "gym",
+    "הליכון": "gym",
+    "משקולות": "gym",
+    "סטודיו": "gym",
+    
+    # cafe
     "קפה": "cafe",
+    "ארומה": "cafe",
+    "קפאין": "cafe",
+    "אספרסו": "cafe",
+    "הפוך": "cafe",
+    "מאפה": "cafe",
+    "נספרסו": "cafe",
+    "קפוצ'ינו": "cafe",
+    
+    # restaurant
     "ארוחת": "restaurant",
     "מסעדה": "restaurant",
+    "פיצה": "restaurant",
+    "המבורגר": "restaurant",
+    "סושי": "restaurant",
+    "לאנץ'": "restaurant",
+    "דינר": "restaurant",
+    "סטייק": "restaurant",
+    "פאב": "restaurant",
+    "בר": "restaurant",
+    "שווארמה": "restaurant",
+    "פלאפל": "restaurant",
+    
+    # atm
     "כספומט": "atm",
-    "כסף": "bank",
+    "משוך": "atm",
+    "למשוך": "atm",
+    "כסף מזומן": "atm",
+    "מזומן": "atm",
+    "atm": "atm",
+    
+    # bank
+    "בנק": "bank",
+    "הפקד": "bank",
+    "להפקיד": "bank",
+    "צ'ק": "bank",
+    "משכנתא": "bank",
+    "חשבון": "bank",
+    "פועלים": "bank",
+    "לאומי": "bank",
+    "דיסקונט": "bank",
+    "מזרחי": "bank",
+    "סניף בנק": "bank",
+    
+    # bakery
+    "מאפייה": "bakery",
+    "מאפיה": "bakery",
+    "לחמניה": "bakery",
+    "חלה": "bakery",
+    "עוגה": "bakery",
+    "עוגיות": "bakery",
+    "בורקס": "bakery",
+    "קרואסון": "bakery",
+    "פיתות": "bakery",
+    
+    # hardware_store
+    "טמבור": "hardware_store",
+    "מפתח": "hardware_store",
+    "שכפל": "hardware_store",
+    "לשכפל": "hardware_store",
+    "ברגים": "hardware_store",
+    "כלי עבודה": "hardware_store",
+    "פטיש": "hardware_store",
+    "צבע": "hardware_store",
+    "מברג": "hardware_store",
+    "מנורה": "hardware_store",
+    
+    # electronics_store
+    "כבל": "electronics_store",
+    "מטען": "electronics_store",
+    "טלפון": "electronics_store",
+    "מחשב": "electronics_store",
+    "אזניות": "electronics_store",
+    "סוללה": "electronics_store",
+    "סוללות": "electronics_store",
+    "אוזניות": "electronics_store",
+    "מטען לטלפון": "electronics_store",
+    
+    # library
+    "ספרייה": "library",
+    "ספריה": "library",
     "ספר": "library",
+    "ללמוד": "library",
+    "שקט": "library",
+    
+    # print_shop
     "הדפס": "print_shop",
+    "להדפיס": "print_shop",
+    "צילום": "print_shop",
+    "לצלם": "print_shop",
+    "סורק": "print_shop",
+    "לסרוק": "print_shop",
+    
+    # park
+    "פארק": "park",
+    "גינה": "park",
+    "דשא": "park",
+    "טיול": "park",
+    "גינת": "park",
 }
 
 
@@ -91,11 +235,44 @@ def normalize_text(value):
     return re.sub(r"[^a-z0-9\u0590-\u05ff]+", " ", str(value).lower()).strip()
 
 
+VALID_HEBREW_PREFIXES = {
+    # Single
+    "ב", "ה", "ו", "ל", "מ", "ש", "כ",
+    # Double
+    "וה", "וב", "ול", "ומ", "וש", "וכ",
+    "שה", "שב", "של", "שמ", "שכ",
+    # Triple
+    "וכש", "שכש"
+}
+
+
 def infer_task_place_query(title):
     lowered = normalize_text(title)
-    for keyword, query in TASK_PLACE_HINTS.items():
-        if normalize_text(keyword) in lowered:
-            return query
+    words = lowered.split()
+    
+    # Sort keywords by length descending so longer phrases match first (e.g. "דואר ישראל" before "דואר")
+    sorted_keywords = sorted(TASK_PLACE_HINTS.keys(), key=len, reverse=True)
+    
+    for word in words:
+        for keyword in sorted_keywords:
+            kw_norm = normalize_text(keyword)
+            # 1. Exact match
+            if word == kw_norm:
+                return TASK_PLACE_HINTS[keyword]
+            # 2. Hebrew prefix support with valid prefixes list
+            if len(word) > len(kw_norm):
+                prefix = word[:-len(kw_norm)]
+                suffix = word[-len(kw_norm):]
+                if suffix == kw_norm and prefix in VALID_HEBREW_PREFIXES:
+                    return TASK_PLACE_HINTS[keyword]
+                    
+    # Fallback to phrase-in-sentence check for multi-word keywords (like "דואר ישראל" or "בית מרקחת")
+    for keyword in sorted_keywords:
+        if " " in keyword:
+            kw_norm = normalize_text(keyword)
+            if kw_norm in lowered:
+                return TASK_PLACE_HINTS[keyword]
+                
     return None
 
 
@@ -674,7 +851,7 @@ class TaskViewSet(viewsets.ModelViewSet):
             mime_type = file_obj.content_type or 'audio/mp4'
             device_time = request.data.get('deviceTime')
             
-            ai_data = parse_voice_message_with_ai(audio_bytes, mime_type=mime_type, device_time=device_time)
+            ai_data = parse_voice_message_with_ai(audio_bytes, mime_type=mime_type, device_time=device_time, user=request.user)
             if not ai_data or not ai_data.get('title'):
                 return Response({'error': 'AI failed to parse the voice recording'}, status=status.HTTP_422_UNPROCESSABLE_ENTITY)
                 
@@ -742,6 +919,23 @@ ANCHOR_MAP = {
     'school': UserContext.ContextKey.SCHOOL,
     'gym': UserContext.ContextKey.GYM,
 }
+
+
+def get_user_context_choices(user):
+    if not user or not user.is_authenticated:
+        return ["work", "home", "school", "gym"]
+    
+    saved_keys = list(
+        UserContext.objects.filter(user=user)
+        .values_list('key', flat=True)
+    )
+    
+    core_keys = ["work", "home", "school", "gym"]
+    for k in core_keys:
+        if k not in saved_keys:
+            saved_keys.append(k)
+            
+    return saved_keys
 
 
 def infer_context_keys(text):
@@ -817,6 +1011,8 @@ def ask_ai(request):
     try:
         client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
         current_time_str = device_time if device_time else timezone.now().isoformat()
+        choices = get_user_context_choices(request.user)
+        choices_str = ", ".join([f"'{c}'" for c in choices])
 
         prompt = f"""You are a smart assistant for a task management app. The user will give you a task description in Hebrew or English.
 Analyze it and return a valid JSON object ONLY. Do not write any markdown formatting, do not write ```json ... ```, do not write explanations.
@@ -825,8 +1021,23 @@ Task: '{title}'
 
 JSON Schema:
 {{
-  "locationQuery": "place type in English (e.g., supermarket, pharmacy, bank, post_office, cafe, gym, bakery, park, library, restaurant) or null if none",
-  "requiredContext": "context key if mentioned, else null (choices: 'work', 'home', 'school', 'gym')",
+  "locationQuery": "place type in English. Map tasks semantically to one of these category keys if they are related:
+   - 'supermarket': for groceries, shopping, food, milk, cheese, cottage, eggs, vegetables, fruits, bread, shampoo, soap, grocery items
+   - 'pharmacy': for medications, pharmacy, pills, drugs, prescription, acamol, advil
+   - 'post_office': for packages, mail, letters, stamps, post office
+   - 'bank': for bank, depositing checks, loans
+   - 'atm': for cash, withdraw, ATM
+   - 'cafe': for coffee, cafe, espresso
+   - 'restaurant': for dinner, lunch, restaurant, meals, food menu, pizza, sushi, hamburger
+   - 'gym': for workout, training, fitness, gym, exercise
+   - 'bakery': for bread, cake, bakery, croissant, challah, pita
+   - 'hardware_store': for tools, screws, keys, replica keys, hammer, hardware store, repair
+   - 'electronics_store': for cables, charger, phone charger, electronics, computer repair, USB cable, headphones
+   - 'library': for books, study, library
+   - 'print_shop': for printing, copying, scanning
+   - 'park': for park, running, nature
+   Or null if the task is not related to a physical place category. Be extremely smart and classify specific products/items to their corresponding category, even if the category name itself is not mentioned.",
+  "requiredContext": "context key if mentioned, else null (choices: {choices_str})",
   "contextCondition": "relation to context if mentioned, else null (choices: 'before', 'during', 'after')",
   "dueDate": "ISO 8601 date time string if date/time is mentioned relative to current time, else null"
 }}
@@ -834,10 +1045,17 @@ JSON Schema:
 Current Time Context: {current_time_str}
 
 Examples:
-- "לקנות חלב אחרי העבודה" -> {{"locationQuery": "supermarket", "requiredContext": "work", "contextCondition": "after", "dueDate": null}}
-- "לעשות אימון כושר" -> {{"locationQuery": "gym", "requiredContext": "gym", "contextCondition": "during", "dueDate": null}}
-- "ללמוד למבחן לפני הלימודים" -> {{"locationQuery": "library", "requiredContext": "school", "contextCondition": "before", "dueDate": null}}
-- "לקנות לחם" -> {{"locationQuery": "bakery", "requiredContext": null, "contextCondition": null, "dueDate": null}}
+- "לקנות חלב וגבינה אחרי העבודה" -> {{"locationQuery": "supermarket", "requiredContext": "work", "contextCondition": "after", "dueDate": null}}
+- "לקנות אקמול" -> {{"locationQuery": "pharmacy", "requiredContext": null, "contextCondition": null, "dueDate": null}}
+- "לשכפל מפתח" -> {{"locationQuery": "hardware_store", "requiredContext": null, "contextCondition": null, "dueDate": null}}
+- "ללמוד למבחן בספרייה לפני הלימודים" -> {{"locationQuery": "library", "requiredContext": "school", "contextCondition": "before", "dueDate": null}}
+- "למשוך כסף" -> {{"locationQuery": "atm", "requiredContext": null, "contextCondition": null, "dueDate": null}}
+- "להפקיד צ'ק בבנק" -> {{"locationQuery": "bank", "requiredContext": "bank", "contextCondition": "during", "dueDate": null}}
+- "לקנות קוטג' וקשקבל מחר בבוקר" -> {{"locationQuery": "supermarket", "requiredContext": null, "contextCondition": null, "dueDate": "2026-06-08T08:00:00"}}
+- "לקנות שמפו לשיער וסבון כלים" -> {{"locationQuery": "supermarket", "requiredContext": null, "contextCondition": null, "dueDate": null}}
+- "לקנות כבל מטען לטלפון" -> {{"locationQuery": "electronics_store", "requiredContext": null, "contextCondition": null, "dueDate": null}}
+- "לקנות קרואסון חם" -> {{"locationQuery": "bakery", "requiredContext": null, "contextCondition": null, "dueDate": null}}
+- "לשלוח מכתב בדואר" -> {{"locationQuery": "post_office", "requiredContext": null, "contextCondition": null, "dueDate": null}}
 - "לחייג לאמא מחר ב10 בבוקר" -> {{"locationQuery": null, "requiredContext": null, "contextCondition": null, "dueDate": "2026-06-08T10:00:00"}}
 """
 
@@ -1180,7 +1398,7 @@ def download_telegram_file(file_id):
         return None
 
 
-def parse_voice_message_with_ai(audio_bytes, mime_type='audio/ogg', device_time=None):
+def parse_voice_message_with_ai(audio_bytes, mime_type='audio/ogg', device_time=None, user=None):
     gemini_key = os.environ.get("GEMINI_API_KEY")
     if not gemini_key:
         return None
@@ -1189,9 +1407,10 @@ def parse_voice_message_with_ai(audio_bytes, mime_type='audio/ogg', device_time=
         from google import genai
         from google.genai import types
         
-        client = genai.Client(api_key=gemini_key)
+        choices = get_user_context_choices(user)
+        choices_str = ", ".join([f"'{c}'" for c in choices])
         current_time_str = device_time if device_time else timezone.now().isoformat()
-        
+
         prompt = f"""You are a smart assistant for a task management app.
 The user has provided a voice message (audio) in Hebrew or English.
 First, transcribe the voice message accurately.
@@ -1201,8 +1420,23 @@ Return a valid JSON object ONLY. Do not write any markdown formatting, do not wr
 JSON Schema:
 {{
   "title": "the task description / transcription in its original language (Hebrew or English) - clean, concise task title",
-  "locationQuery": "place type in English (e.g., supermarket, pharmacy, bank, post_office, cafe, gym, bakery, park, library, restaurant) or null if none",
-  "requiredContext": "context key if mentioned, else null (choices: 'work', 'home', 'school', 'gym')",
+  "locationQuery": "place type in English. Map tasks semantically to one of these category keys if they are related:
+   - 'supermarket': for groceries, shopping, food, milk, cheese, cottage, eggs, vegetables, fruits, bread, shampoo, soap, grocery items
+   - 'pharmacy': for medications, pharmacy, pills, drugs, prescription, acamol, advil
+   - 'post_office': for packages, mail, letters, stamps, post office
+   - 'bank': for bank, depositing checks, loans
+   - 'atm': for cash, withdraw, ATM
+   - 'cafe': for coffee, cafe, espresso
+   - 'restaurant': for dinner, lunch, restaurant, meals, food menu, pizza, sushi, hamburger
+   - 'gym': for workout, training, fitness, gym, exercise
+   - 'bakery': for bread, cake, bakery, croissant, challah, pita
+   - 'hardware_store': for tools, screws, keys, replica keys, hammer, hardware store, repair
+   - 'electronics_store': for cables, charger, phone charger, electronics, computer repair, USB cable, headphones
+   - 'library': for books, study, library
+   - 'print_shop': for printing, copying, scanning
+   - 'park': for park, running, nature
+   Or null if the task is not related to a physical place category. Be extremely smart and classify specific products/items to their corresponding category, even if the category name itself is not mentioned.",
+  "requiredContext": "context key if mentioned, else null (choices: {choices_str})",
   "contextCondition": "relation to context if mentioned, else null (choices: 'before', 'during', 'after')",
   "dueDate": "ISO 8601 date time string if date/time is mentioned relative to current time, else null"
 }}
@@ -1211,8 +1445,11 @@ Current Time Context: {current_time_str}
 
 Examples:
 - Audio saying "לקנות חלב אחרי העבודה" -> {{"title": "לקנות חלב אחרי העבודה", "locationQuery": "supermarket", "requiredContext": "work", "contextCondition": "after", "dueDate": null}}
+- Audio saying "לקנות אקמול" -> {{"title": "לקנות אקמול", "locationQuery": "pharmacy", "requiredContext": null, "contextCondition": null, "dueDate": null}}
 - Audio saying "לעשות אימון כושר מחר בבוקר" -> {{"title": "לעשות אימון כושר מחר בבוקר", "locationQuery": "gym", "requiredContext": "gym", "contextCondition": "during", "dueDate": "2026-06-07T08:00:00"}}
-- Audio saying "לקנות לחם בבוקר" -> {{"title": "לקנות לחם בבוקר", "locationQuery": "bakery", "requiredContext": null, "contextCondition": null, "dueDate": "2026-06-06T09:00:00"}}
+- Audio saying "לקנות קרואסון חם מאפייה" -> {{"title": "לקנות קרואסון חם מאפייה", "locationQuery": "bakery", "requiredContext": null, "contextCondition": null, "dueDate": null}}
+- Audio saying "לקנות קוטג' וקשקבל" -> {{"title": "לקנות קוטג' וקשקבל", "locationQuery": "supermarket", "requiredContext": null, "contextCondition": null, "dueDate": null}}
+- Audio saying "לקנות כבל מטען לטלפון" -> {{"title": "לקנות כבל מטען לטלפון", "locationQuery": "electronics_store", "requiredContext": null, "contextCondition": null, "dueDate": null}}
 """
 
         audio_part = types.Part.from_bytes(
@@ -1255,6 +1492,9 @@ def fetch_ai_details_for_telegram(title, user):
         from google import genai
         client = genai.Client(api_key=gemini_key)
         
+        choices = get_user_context_choices(user)
+        choices_str = ", ".join([f"'{c}'" for c in choices])
+
         prompt = f"""You are a smart assistant for a task management app. The user will give you a task description in Hebrew or English.
 Analyze it and return a valid JSON object ONLY. Do not write any markdown formatting, do not write ```json ... ```, do not write explanations.
 
@@ -1262,8 +1502,23 @@ Task: '{title}'
 
 JSON Schema:
 {{
-  "locationQuery": "place type in English (e.g., supermarket, pharmacy, bank, post_office, cafe, gym, post_office, bakery, park, library, restaurant)",
-  "requiredContext": "context key if mentioned, else null (choices: 'work', 'home', 'school', 'gym')",
+  "locationQuery": "place type in English. Map tasks semantically to one of these category keys if they are related:
+   - 'supermarket': for groceries, shopping, food, milk, cheese, cottage, eggs, vegetables, fruits, bread, shampoo, soap, grocery items
+   - 'pharmacy': for medications, pharmacy, pills, drugs, prescription, acamol, advil
+   - 'post_office': for packages, mail, letters, stamps, post office
+   - 'bank': for bank, depositing checks, loans
+   - 'atm': for cash, withdraw, ATM
+   - 'cafe': for coffee, cafe, espresso
+   - 'restaurant': for dinner, lunch, restaurant, meals, food menu, pizza, sushi, hamburger
+   - 'gym': for workout, training, fitness, gym, exercise
+   - 'bakery': for bread, cake, bakery, croissant, challah, pita
+   - 'hardware_store': for tools, screws, keys, replica keys, hammer, hardware store, repair
+   - 'electronics_store': for cables, charger, phone charger, electronics, computer repair, USB cable, headphones
+   - 'library': for books, study, library
+   - 'print_shop': for printing, copying, scanning
+   - 'park': for park, running, nature
+   Or null if the task is not related to a physical place category. Be extremely smart and classify specific products/items to their corresponding category, even if the category name itself is not mentioned.",
+  "requiredContext": "context key if mentioned, else null (choices: {choices_str})",
   "contextCondition": "relation to context if mentioned, else null (choices: 'before', 'during', 'after')",
   "dueDate": "ISO 8601 date time string if date/time is mentioned relative to current time, else null"
 }}
@@ -1271,10 +1526,18 @@ JSON Schema:
 Current Time Context: {timezone.now().isoformat()}
 
 Examples:
-- "לקנות חלב אחרי העבודה" -> {{"locationQuery": "supermarket", "requiredContext": "work", "contextCondition": "after", "dueDate": null}}
-- "לעשות אימון כושר" -> {{"locationQuery": "gym", "requiredContext": "gym", "contextCondition": "during", "dueDate": null}}
-- "לקנות לחם" -> {{"locationQuery": "bakery", "requiredContext": null, "contextCondition": null, "dueDate": null}}
-- "פגישה עם דני מחר ב-10 בבוקר" -> {{"locationQuery": null, "requiredContext": null, "contextCondition": null, "dueDate": "2026-06-07T10:00:00"}}
+- "לקנות חלב וגבינה אחרי העבודה" -> {{"locationQuery": "supermarket", "requiredContext": "work", "contextCondition": "after", "dueDate": null}}
+- "לקנות אקמול" -> {{"locationQuery": "pharmacy", "requiredContext": null, "contextCondition": null, "dueDate": null}}
+- "לשכפל מפתח" -> {{"locationQuery": "hardware_store", "requiredContext": null, "contextCondition": null, "dueDate": null}}
+- "ללמוד למבחן בספרייה לפני הלימודים" -> {{"locationQuery": "library", "requiredContext": "school", "contextCondition": "before", "dueDate": null}}
+- "למשוך כסף" -> {{"locationQuery": "atm", "requiredContext": null, "contextCondition": null, "dueDate": null}}
+- "להפקיד צ'ק בבנק" -> {{"locationQuery": "bank", "requiredContext": "bank", "contextCondition": "during", "dueDate": null}}
+- "לקנות קוטג' וקשקבל מחר בבוקר" -> {{"locationQuery": "supermarket", "requiredContext": null, "contextCondition": null, "dueDate": "2026-06-08T08:00:00"}}
+- "לקנות שמפו לשיער וסבון כלים" -> {{"locationQuery": "supermarket", "requiredContext": null, "contextCondition": null, "dueDate": null}}
+- "לקנות כבל מטען לטלפון" -> {{"locationQuery": "electronics_store", "requiredContext": null, "contextCondition": null, "dueDate": null}}
+- "לקנות קרואסון חם" -> {{"locationQuery": "bakery", "requiredContext": null, "contextCondition": null, "dueDate": null}}
+- "לשלוח מכתב בדואר" -> {{"locationQuery": "post_office", "requiredContext": null, "contextCondition": null, "dueDate": null}}
+- "לחייג לאמא מחר ב10 בבוקר" -> {{"locationQuery": null, "requiredContext": null, "contextCondition": null, "dueDate": "2026-06-08T10:00:00"}}
 """
         response = client.models.generate_content(
             model='gemini-2.5-flash',
@@ -1409,7 +1672,7 @@ def telegram_webhook(request):
             send_telegram_message(chat_id, "❌ <b>Failed to download voice note.</b> Please try again.")
             return Response({"status": "ok"})
             
-        ai_data = parse_voice_message_with_ai(audio_bytes)
+        ai_data = parse_voice_message_with_ai(audio_bytes, user=profile.user)
         if not ai_data or not ai_data.get("title"):
             send_telegram_message(chat_id, "❌ <b>AI failed to parse your voice note.</b> Please speak clearly and try again.")
             return Response({"status": "ok"})
@@ -1732,7 +1995,7 @@ def whatsapp_webhook(request):
         send_whatsapp_message(sender_number, "🎙️ *Processing voice message with AI...*")
         try:
             audio_bytes = base64.b64decode(media["data"])
-            ai_data = parse_voice_message_with_ai(audio_bytes, mime_type=media.get("mimetype", "audio/ogg"))
+            ai_data = parse_voice_message_with_ai(audio_bytes, mime_type=media.get("mimetype", "audio/ogg"), user=profile.user)
             
             if not ai_data or not ai_data.get("title"):
                 send_whatsapp_message(sender_number, "❌ *AI failed to parse your voice note.* Please speak clearly and try again.")
