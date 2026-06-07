@@ -12,12 +12,14 @@ export default function HomeScreen({
     token,
     API_BASE,
     onToggleTaskComplete,
-    onDeleteTask
+    onDeleteTask,
+    onSyncLocation,
+    isLocationSyncing
 }) {
     const [contexts, setContexts] = useState([]);
     const [searchQuery, setSearchQuery] = useState('');
-    const [sortBy, setSortBy] = useState('smart'); // 'smart', 'dueDate', 'location'
     const [scrollEnabled, setScrollEnabled] = useState(true);
+    const sortBy = 'smart';
 
     // Fetch contexts for location sorting on mount
     const fetchContexts = async () => {
@@ -185,35 +187,25 @@ export default function HomeScreen({
                 )}
             </View>
 
-            {/* Sorting Chip Row */}
-            <View>
-                <ScrollView 
-                    horizontal 
-                    showsHorizontalScrollIndicator={false} 
-                    contentContainerStyle={styles.sortContainer}
+            {/* Location Status & Sync Row */}
+            <View style={styles.locationContainer}>
+                <View style={styles.locationInfo}>
+                    <Text style={styles.locationLabel}>Device Location</Text>
+                    <Text style={styles.locationCoords}>
+                        {currentLocation?.coords 
+                            ? `${currentLocation.coords.latitude.toFixed(4)}, ${currentLocation.coords.longitude.toFixed(4)}`
+                            : 'Acquiring location...'}
+                    </Text>
+                </View>
+                <TouchableOpacity 
+                    style={[styles.syncButton, isLocationSyncing && styles.syncButtonActive]} 
+                    onPress={onSyncLocation}
+                    disabled={isLocationSyncing}
                 >
-                    {[
-                        { key: 'smart', label: 'Smart 💡' },
-                        { key: 'dueDate', label: 'Due Date 📅' },
-                        { key: 'location', label: 'Proximity 📍' }
-                    ].map(option => (
-                        <TouchableOpacity
-                            key={option.key}
-                            style={[
-                                styles.sortChip,
-                                sortBy === option.key && styles.sortChipActive
-                            ]}
-                            onPress={() => setSortBy(option.key)}
-                        >
-                            <Text style={[
-                                styles.sortChipText,
-                                sortBy === option.key && styles.sortChipTextActive
-                            ]}>
-                                {option.label}
-                            </Text>
-                        </TouchableOpacity>
-                    ))}
-                </ScrollView>
+                    <Text style={styles.syncButtonText}>
+                        {isLocationSyncing ? '🔄 Syncing...' : '🔄 Sync Now'}
+                    </Text>
+                </TouchableOpacity>
             </View>
 
             <Text style={styles.listTitle}>My Tasks</Text>
@@ -305,28 +297,60 @@ const styles = StyleSheet.create({
     clearBtn: { padding: 4 },
     clearBtnText: { fontSize: 12, color: '#9ca3af', fontWeight: 'bold' },
 
-    // Sort styles
-    sortContainer: {
+    // Location Sync styles
+    locationContainer: {
         flexDirection: 'row',
-        paddingHorizontal: 20,
-        gap: 8,
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        backgroundColor: '#fff',
+        borderRadius: 16,
+        paddingVertical: 12,
+        paddingHorizontal: 16,
+        marginHorizontal: 20,
         marginBottom: 15,
-        paddingBottom: 4,
-    },
-    sortChip: {
-        paddingVertical: 8,
-        paddingHorizontal: 14,
-        borderRadius: 20,
-        backgroundColor: '#f3f4f6',
         borderWidth: 1,
         borderColor: '#e5e7eb',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 5,
+        elevation: 2,
     },
-    sortChipActive: {
+    locationInfo: {
+        flex: 1,
+    },
+    locationLabel: {
+        fontSize: 12,
+        fontWeight: '700',
+        color: '#6b7280',
+        textTransform: 'uppercase',
+        letterSpacing: 0.5,
+    },
+    locationCoords: {
+        fontSize: 15,
+        fontWeight: '600',
+        color: '#1f2937',
+        marginTop: 2,
+    },
+    syncButton: {
         backgroundColor: '#ecfdf5',
+        borderWidth: 1,
         borderColor: '#059669',
+        borderRadius: 10,
+        paddingVertical: 8,
+        paddingHorizontal: 12,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
     },
-    sortChipText: { fontSize: 13, fontWeight: '700', color: '#4b5563' },
-    sortChipTextActive: { color: '#059669' },
+    syncButtonActive: {
+        opacity: 0.7,
+    },
+    syncButtonText: {
+        color: '#059669',
+        fontSize: 13,
+        fontWeight: '700',
+    },
 
     listTitle: { fontSize: 20, fontWeight: '800', color: '#374151', textAlign: 'left', marginBottom: 15, paddingHorizontal: 20 },
     taskRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#fff', padding: 18, borderRadius: 20, marginBottom: 12, marginHorizontal: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 5, elevation: 2 },

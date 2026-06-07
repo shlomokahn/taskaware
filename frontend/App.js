@@ -434,6 +434,8 @@ function AppContent() {
             API_BASE={API_BASE}
             onToggleTaskComplete={handleToggleTaskComplete}
             onDeleteTask={handleDeleteTask}
+            onSyncLocation={syncLocation}
+            isLocationSyncing={isSyncing}
         />
     );
 
