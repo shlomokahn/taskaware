@@ -474,72 +474,73 @@ def evaluate_conditional_notifications(user, user_lat, user_lng):
                 )
                 alert_sent = True
                 
-            if profile.telegram_chat_id:
-                if len(notify_list) == 1:
-                    task = notify_list[0]
-                    context_label = dict(UserContext.ContextKey.choices).get(task.required_context, task.required_context)
-                    context_name = context_label.lower() if context_label else "location"
-                    
-                    tg_text = f"📍 <b>Task location nearby!</b>\n\n"
-                    if task.context_condition == 'during':
-                        tg_text += f"While you are at {context_name}, there is a <b>{nearest_place['name']}</b> nearby ({nearest_place['address']}).\n"
-                    elif task.context_condition == 'before':
-                        tg_text += f"Before you start at {context_name}, there is a <b>{nearest_place['name']}</b> nearby ({nearest_place['address']}).\n"
-                    else:
-                        tg_text += f"Since you finished at {context_name}, there is a <b>{nearest_place['name']}</b> nearby ({nearest_place['address']}).\n"
-                    tg_text += f"\nDon't forget: <b>{task.title}</b>"
-                    
-                    reply_markup = {
-                        "inline_keyboard": [
-                            [
-                                {"text": "✓ Complete", "callback_data": f"complete_{task.id}"},
-                                {"text": "🔕 Mute", "callback_data": f"mute_{task.id}"}
-                            ]
-                        ]
-                    }
-                    send_telegram_message(profile.telegram_chat_id, tg_text, reply_markup=reply_markup)
-                else:
-                    tg_text = f"📍 <b>{nearest_place['name']}</b> nearby ({nearest_place['address']})\n"
-                    tg_text += f"You have <b>{len(notify_list)} tasks</b> nearby:\n\n"
-                    
-                    inline_keyboard = []
-                    for t in notify_list:
-                        tg_text += f"• <b>{t.title}</b>\n"
-                        inline_keyboard.append([
-                            {"text": f"✓ Complete: {t.title[:15]}...", "callback_data": f"complete_{t.id}"},
-                            {"text": f"🔕 Mute: {t.title[:15]}...", "callback_data": f"mute_{t.id}"}
-                        ])
-                    
-                    reply_markup = {"inline_keyboard": inline_keyboard}
-                    send_telegram_message(profile.telegram_chat_id, tg_text, reply_markup=reply_markup)
-                alert_sent = True
-                
-            if profile.whatsapp_number:
-                if len(notify_list) == 1:
-                    task = notify_list[0]
-                    context_label = dict(UserContext.ContextKey.choices).get(task.required_context, task.required_context)
-                    context_name = context_label.lower() if context_label else "location"
-                    
-                    wa_text = f"📍 *Task location nearby!*\n\n"
-                    if task.context_condition == 'during':
-                        wa_text += f"While you are at {context_name}, there is a *{nearest_place['name']}* nearby ({nearest_place['address']}).\n"
-                    elif task.context_condition == 'before':
-                        wa_text += f"Before you start at {context_name}, there is a *{nearest_place['name']}* nearby ({nearest_place['address']}).\n"
-                    else:
-                        wa_text += f"Since you finished at {context_name}, there is a *{nearest_place['name']}* nearby ({nearest_place['address']}).\n"
-                    wa_text += f"\nDon't forget: *{task.title}*\n\n"
-                    wa_text += f"👉 Reply *complete {task.id}* to mark completed, or *mute {task.id}* to mute alerts."
-                    send_whatsapp_message(profile.whatsapp_number, wa_text)
-                else:
-                    wa_text = f"📍 *{nearest_place['name']}* nearby ({nearest_place['address']})\n"
-                    wa_text += f"You have *{len(notify_list)} tasks* nearby:\n\n"
-                    
-                    for t in notify_list:
-                        wa_text += f"• *{t.title}* (ID: {t.id})\n"
-                        
-                    wa_text += f"\n👉 Reply *complete <id>* or *mute <id>* to perform actions."
-                    send_whatsapp_message(profile.whatsapp_number, wa_text)
-                alert_sent = True
+            # Telegram and WhatsApp alerts for nearby location are disabled per user request
+            # if profile.telegram_chat_id:
+            #     if len(notify_list) == 1:
+            #         task = notify_list[0]
+            #         context_label = dict(UserContext.ContextKey.choices).get(task.required_context, task.required_context)
+            #         context_name = context_label.lower() if context_label else "location"
+            #         
+            #         tg_text = f"📍 <b>Task location nearby!</b>\n\n"
+            #         if task.context_condition == 'during':
+            #             tg_text += f"While you are at {context_name}, there is a <b>{nearest_place['name']}</b> nearby ({nearest_place['address']}).\n"
+            #         elif task.context_condition == 'before':
+            #             tg_text += f"Before you start at {context_name}, there is a <b>{nearest_place['name']}</b> nearby ({nearest_place['address']}).\n"
+            #         else:
+            #             tg_text += f"Since you finished at {context_name}, there is a <b>{nearest_place['name']}</b> nearby ({nearest_place['address']}).\n"
+            #         tg_text += f"\nDon't forget: <b>{task.title}</b>"
+            #         
+            #         reply_markup = {
+            #             "inline_keyboard": [
+            #                 [
+            #                     {"text": "✓ Complete", "callback_data": f"complete_{task.id}"},
+            #                     {"text": "🔕 Mute", "callback_data": f"mute_{task.id}"}
+            #                 ]
+            #             ]
+            #         }
+            #         send_telegram_message(profile.telegram_chat_id, tg_text, reply_markup=reply_markup)
+            #     else:
+            #         tg_text = f"📍 <b>{nearest_place['name']}</b> nearby ({nearest_place['address']})\n"
+            #         tg_text += f"You have <b>{len(notify_list)} tasks</b> nearby:\n\n"
+            #         
+            #         inline_keyboard = []
+            #         for t in notify_list:
+            #             tg_text += f"• <b>{t.title}</b>\n"
+            #             inline_keyboard.append([
+            #                 {"text": f"✓ Complete: {t.title[:15]}...", "callback_data": f"complete_{t.id}"},
+            #                 {"text": f"🔕 Mute: {t.title[:15]}...", "callback_data": f"mute_{t.id}"}
+            #             ])
+            #         
+            #         reply_markup = {"inline_keyboard": inline_keyboard}
+            #         send_telegram_message(profile.telegram_chat_id, tg_text, reply_markup=reply_markup)
+            #     alert_sent = True
+            #     
+            # if profile.whatsapp_number:
+            #     if len(notify_list) == 1:
+            #         task = notify_list[0]
+            #         context_label = dict(UserContext.ContextKey.choices).get(task.required_context, task.required_context)
+            #         context_name = context_label.lower() if context_label else "location"
+            #         
+            #         wa_text = f"📍 *Task location nearby!*\n\n"
+            #         if task.context_condition == 'during':
+            #             wa_text += f"While you are at {context_name}, there is a *{nearest_place['name']}* nearby ({nearest_place['address']}).\n"
+            #         elif task.context_condition == 'before':
+            #             wa_text += f"Before you start at {context_name}, there is a *{nearest_place['name']}* nearby ({nearest_place['address']}).\n"
+            #         else:
+            #             wa_text += f"Since you finished at {context_name}, there is a *{nearest_place['name']}* nearby ({nearest_place['address']}).\n"
+            #         wa_text += f"\nDon't forget: *{task.title}*\n\n"
+            #         wa_text += f"👉 Reply *complete {task.id}* to mark completed, or *mute {task.id}* to mute alerts."
+            #         send_whatsapp_message(profile.whatsapp_number, wa_text)
+            #     else:
+            #         wa_text = f"📍 *{nearest_place['name']}* nearby ({nearest_place['address']})\n"
+            #         wa_text += f"You have *{len(notify_list)} tasks* nearby:\n\n"
+            #         
+            #         for t in notify_list:
+            #             wa_text += f"• *{t.title}* (ID: {t.id})\n"
+            #             
+            #         wa_text += f"\n👉 Reply *complete <id>* or *mute <id>* to perform actions."
+            #         send_whatsapp_message(profile.whatsapp_number, wa_text)
+            #     alert_sent = True
                 
             if alert_sent:
                 # Update last notified positions
