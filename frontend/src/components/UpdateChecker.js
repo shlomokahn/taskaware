@@ -81,29 +81,20 @@ export default function UpdateChecker({ API_BASE }) {
                 console.log('Update fetched successfully. Reloading...');
                 await Updates.reloadAsync();
             } else {
-                console.log('checkForUpdateAsync says no update is available. Trying direct fetch/reload fallback...');
-                try {
-                    await Updates.fetchUpdateAsync();
-                    await Updates.reloadAsync();
-                } catch (fetchErr) {
-                    console.log('Direct fetch/reload failed:', fetchErr);
-                    try {
-                        await Updates.reloadAsync();
-                    } catch (reloadErr) {
-                        console.log('Direct reload failed:', reloadErr);
-                        Alert.alert('Up to date', 'You are running the latest version');
-                        setShowUpdateModal(false);
-                    }
-                }
+                console.log('checkForUpdateAsync says no update is available.');
+                Alert.alert(
+                    'Update Not Found',
+                    'The update has been registered on the server but is not yet available for download on EAS. Please ensure the update has been published via `eas update`.',
+                    [{ text: 'OK', onPress: () => setShowUpdateModal(false) }]
+                );
             }
         } catch (error) {
             console.error('Error fetching update:', error);
-            try {
-                console.log('Attempting reload fallback after error...');
-                await Updates.reloadAsync();
-            } catch (reloadErr) {
-                Alert.alert('Update Error', `Failed to download update: ${error.message || error}`);
-            }
+            Alert.alert(
+                'Update Error', 
+                `Failed to download update: ${error.message || error}\n\nPlease ensure you have published the update via \`eas update\` and that your device is online.`,
+                [{ text: 'OK', onPress: () => setShowUpdateModal(false) }]
+            );
         } finally {
             setIsDownloading(false);
         }
