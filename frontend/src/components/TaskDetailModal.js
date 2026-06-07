@@ -1,7 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Image, Linking, Modal, View, Text, StyleSheet, TouchableOpacity, Platform, ScrollView } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function TaskDetailModal({ visible, task, onClose, onToggle, onDelete, onEdit, onMuteToggle, token, API_BASE, currentLocation }) {
+    const insets = useSafeAreaInsets();
     const [nearbyPlaces, setNearbyPlaces] = useState([]);
     const [mapImageUrl, setMapImageUrl] = useState(null);
     const [nearbyLoading, setNearbyLoading] = useState(false);
@@ -23,8 +25,8 @@ export default function TaskDetailModal({ visible, task, onClose, onToggle, onDe
         if (!dateString) return null;
         const d = new Date(dateString);
         if (isNaN(d.getTime())) return null;
-        const day = d.toLocaleDateString('he-IL', { day: '2-digit', month: 'short' });
-        const time = d.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
+        const day = d.toLocaleDateString('en-US', { day: '2-digit', month: 'short' });
+        const time = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
         return { day, time };
     };
 
@@ -136,7 +138,7 @@ export default function TaskDetailModal({ visible, task, onClose, onToggle, onDe
                     <View style={styles.handle} />
                     <View style={[styles.statusStrip, task.isCompleted ? styles.stripDone : styles.stripPending]} />
 
-                    <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
+                    <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[styles.content, { paddingBottom: Math.max(insets.bottom, 16) + 20 }]}>
                         <View style={styles.titleRow}>
                             <Text style={[styles.title, task.isCompleted && styles.titleDone]} numberOfLines={3}>
                                 {task.title}

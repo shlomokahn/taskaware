@@ -1,5 +1,5 @@
 from rest_framework import status, viewsets
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, permission_classes, action
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.authtoken.models import Token
@@ -628,6 +628,36 @@ class TaskViewSet(viewsets.ModelViewSet):
             import traceback
             traceback.print_exc()
             return Response({"error": f"Server error: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @action(detail=False, methods=['POST'], url_path='create-from-voice')
+    def create_from_voice(self, request):
+        file_obj = request.FILES.get('file')
+        if not file_obj:
+            return Response({'error': 'No audio file provided'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            audio_bytes = file_obj.read()
+            mime_type = file_obj.content_type or 'audio/mp4'
+            
+            ai_data = parse_voice_message_with_ai(audio_bytes, mime_type=mime_type)
+            if not ai_data or not ai_data.get('title'):
+                return Response({'error': 'AI failed to parse the voice recording'}, status=status.HTTP_422_UNPROCESSABLE_ENTITY)
+                
+            serializer_data = {
+                'title': ai_data.get('title'),
+                'dueDate': ai_data.get('dueDate'),
+                'locationQuery': ai_data.get('locationQuery'),
+                'requiredContext': ai_data.get('requiredContext'),
+                'contextCondition': ai_data.get('contextCondition'),
+            }
+            serializer = self.get_serializer(data=serializer_data)
+            serializer.is_valid(raise_exception=True)
+            task = serializer.save(user=request.user)
+            
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        except Exception as e:
+            print("Error in create_from_voice:", str(e))
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class UserContextViewSet(viewsets.ModelViewSet):

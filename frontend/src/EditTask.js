@@ -11,8 +11,10 @@ import {
     Alert
 } from 'react-native';
 import DateTimePicker, { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function EditTask({ visible, task, onClose, onSave }) {
+    const insets = useSafeAreaInsets();
     const [title, setTitle] = useState('');
     const [reminderDate, setReminderDate] = useState(null);
     const [showIOSPicker, setShowIOSPicker] = useState(false);
@@ -30,7 +32,7 @@ export default function EditTask({ visible, task, onClose, onSave }) {
     const formatDate = (date) => {
         if (!date) return 'No reminder';
         const d = new Date(date);
-        return isNaN(d.getTime()) ? 'No reminder' : d.toLocaleString('he-IL', {
+        return isNaN(d.getTime()) ? 'No reminder' : d.toLocaleString('en-US', {
             day: '2-digit', month: '2-digit', year: '2-digit',
             hour: '2-digit', minute: '2-digit'
         });
@@ -86,7 +88,7 @@ export default function EditTask({ visible, task, onClose, onSave }) {
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                 style={styles.overlay}
             >
-                <View style={styles.card}>
+                <View style={[styles.card, { paddingBottom: Math.max(insets.bottom, 16) + 20 }]}>
                     <Text style={styles.headerTitle}>Edit task</Text>
 
                     <Text style={styles.label}>task name</Text>
@@ -94,7 +96,7 @@ export default function EditTask({ visible, task, onClose, onSave }) {
                         style={styles.input}
                         value={title}
                         onChangeText={setTitle}
-                        placeholder="שם המשימה..."
+                        placeholder="Task name..."
                         autoFocus
                         selectionColor="#2f855a"
                     />

@@ -12,6 +12,7 @@ import {
     View,
     I18nManager,
 } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
 
 // Force Left-to-Right (LTR) layout direction globally
 try {
@@ -326,6 +327,33 @@ function AppContent() {
         }
     };
 
+    const handleVoiceTaskCreated = async (createdTask) => {
+        try {
+            let finalTask = createdTask;
+            if (createdTask.dueDate) {
+                const triggerDate = new Date(createdTask.dueDate);
+                if (!isNaN(triggerDate.getTime()) && triggerDate > new Date()) {
+                    const notifId = await scheduleNotification(createdTask.title, triggerDate);
+                    if (notifId) {
+                        const updated = await handleUpdateTask(createdTask._id || createdTask.id, {
+                            notificationId: notifId
+                        });
+                        if (updated) {
+                            finalTask = updated;
+                        }
+                    }
+                }
+            }
+            setTasks(prev => [finalTask, ...prev]);
+            setShowAddModal(false);
+            await inferTaskContext(finalTask.title);
+        } catch (error) {
+            console.error('Error handling voice task completion:', error);
+            setTasks(prev => [createdTask, ...prev]);
+            setShowAddModal(false);
+        }
+    };
+
     const handleUpdateTask = async (taskId, fields) => {
         try {
             const res = await fetch(`${API_BASE}/api/tasks/${taskId}/`, {
@@ -485,6 +513,7 @@ function AppContent() {
 
     return (
         <View style={[styles.container, { paddingTop: insets.top }]}>
+            <StatusBar style="dark" />
             <UpdateChecker API_BASE={API_BASE} />
 
             <View style={{ flex: 1 }}>
@@ -552,6 +581,9 @@ function AppContent() {
                 onClose={() => setShowAddModal(false)}
                 creating={creating}
                 onAddTask={handleCreateTask}
+                token={token}
+                API_BASE={API_BASE}
+                onVoiceTaskCreated={handleVoiceTaskCreated}
             />
 
             <ContextPromptModal

@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
     ActivityIndicator,
     KeyboardAvoidingView,
@@ -10,21 +10,152 @@ import {
     TextInput,
     TouchableOpacity,
     View,
+    Alert,
 } from 'react-native';
 import DateTimePicker, { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
+import { Audio } from 'expo-av';
 
-export default function AddTaskModal({ visible, onClose, onAddTask, creating }) {
+export default function AddTaskModal({ visible, onClose, onAddTask, creating, token, API_BASE, onVoiceTaskCreated }) {
     const [title, setTitle] = useState('');
     const [reminderDate, setReminderDate] = useState(null);
     const [showReminderPicker, setShowReminderPicker] = useState(false);
+
+    // Audio recording state
+    const [recording, setRecording] = useState(null);
+    const [isRecording, setIsRecording] = useState(false);
+    const [isTranscribing, setIsTranscribing] = useState(false);
 
     useEffect(() => {
         if (visible) {
             setTitle('');
             setReminderDate(null);
             setShowReminderPicker(false);
+            setRecording(null);
+            setIsRecording(false);
+            setIsTranscribing(false);
         }
     }, [visible]);
+
+    useEffect(() => {
+        return () => {
+            if (recording) {
+                recording.stopAndUnloadAsync().catch(err => console.log('Cleanup recording:', err));
+            }
+        };
+    }, [recording]);
+
+    const startRecording = async () => {
+        try {
+            const permission = await Audio.requestPermissionsAsync();
+            if (permission.status !== 'granted') {
+                Alert.alert('Permission Denied', 'Microphone permission is required to record tasks.');
+                return;
+            }
+
+            await Audio.setAudioModeAsync({
+                allowsRecordingIOS: true,
+                playsInSilentModeIOS: true,
+            });
+
+            console.log('Starting audio recording...');
+            const { recording: newRecording } = await Audio.Recording.createAsync(
+                Audio.RecordingOptionsPresets.HIGH_QUALITY
+            );
+            setRecording(newRecording);
+            setIsRecording(true);
+        } catch (err) {
+            console.error('Failed to start recording:', err);
+            Alert.alert('Recording Error', 'Failed to start microphone recording.');
+        }
+    };
+
+    const stopRecording = async () => {
+        if (!recording) return;
+
+        console.log('Stopping audio recording...');
+        setIsRecording(false);
+        setIsTranscribing(true);
+
+        try {
+            await recording.stopAndUnloadAsync();
+            await Audio.setAudioModeAsync({
+                allowsRecordingIOS: false,
+            });
+            const uri = recording.getURI();
+            setRecording(null);
+
+            if (uri) {
+                await uploadAudio(uri);
+            } else {
+                throw new Error('No recording URI found');
+            }
+        } catch (err) {
+            console.error('Failed to stop recording:', err);
+            Alert.alert('Recording Error', 'Failed to process voice note.');
+            setIsTranscribing(false);
+        }
+    };
+
+    const uploadAudio = async (uri) => {
+        if (!token || !API_BASE) {
+            setIsTranscribing(false);
+            return;
+        }
+
+        try {
+            const formData = new FormData();
+            const uriParts = uri.split('/');
+            const filename = uriParts[uriParts.length - 1];
+            
+            const fileExtension = filename.split('.').pop();
+            let mimeType = 'audio/mp4';
+            if (fileExtension === 'm4a') mimeType = 'audio/m4a';
+            else if (fileExtension === '3gp') mimeType = 'audio/3gp';
+            else if (fileExtension === 'caf') mimeType = 'audio/caf';
+
+            formData.append('file', {
+                uri: uri,
+                name: filename,
+                type: mimeType,
+            });
+
+            console.log('Uploading audio to server...');
+            const res = await fetch(`${API_BASE}/api/tasks/create-from-voice/`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Token ${token}`,
+                },
+                body: formData,
+            });
+
+            const data = await res.json();
+            setIsTranscribing(false);
+
+            if (res.ok) {
+                if (onVoiceTaskCreated) {
+                    onVoiceTaskCreated(data);
+                }
+            } else {
+                console.warn('Voice task upload rejected:', data);
+                Alert.alert(
+                    'Failed to parse task',
+                    data.error || 'AI could not extract task details. Please speak clearly and try again.'
+                );
+            }
+        } catch (error) {
+            console.error('Audio upload failed:', error);
+            Alert.alert('Upload Error', 'Failed to connect to the server.');
+            setIsTranscribing(false);
+        }
+    };
+
+    const handleMicPress = () => {
+        if (isRecording) {
+            stopRecording();
+        } else {
+            startRecording();
+        }
+    };
 
     const handleAdd = () => {
         onAddTask(title, reminderDate);
@@ -87,17 +218,44 @@ export default function AddTaskModal({ visible, onClose, onAddTask, creating }) 
 
                         <View style={{ height: 12 }} />
 
-                        <TextInput
-                            style={styles.taskInputModal}
-                            placeholder="What's your next task?"
-                            value={title}
-                            onChangeText={setTitle}
-                            placeholderTextColor="#9ca3af"
-                            autoFocus={true}
-                            editable={!creating}
-                            returnKeyType="done"
-                            multiline={false}
-                        />
+                        <View style={styles.inputRow}>
+                            <TextInput
+                                style={styles.taskInputModal}
+                                placeholder="What's your next task?"
+                                value={title}
+                                onChangeText={setTitle}
+                                placeholderTextColor="#9ca3af"
+                                autoFocus={true}
+                                editable={!creating && !isRecording && !isTranscribing}
+                                returnKeyType="done"
+                                multiline={false}
+                            />
+                            <TouchableOpacity
+                                style={[
+                                    styles.micBtn,
+                                    isRecording && styles.micBtnActive,
+                                    isTranscribing && styles.micBtnDisabled
+                                ]}
+                                onPress={handleMicPress}
+                                disabled={creating || isTranscribing}
+                            >
+                                <Text style={styles.micBtnText}>{isRecording ? '🛑' : '🎙️'}</Text>
+                            </TouchableOpacity>
+                        </View>
+
+                        {isRecording && (
+                            <View style={styles.recordingStatus}>
+                                <View style={styles.redDot} />
+                                <Text style={styles.recordingText}>Recording... Speak clearly now</Text>
+                            </View>
+                        )}
+
+                        {isTranscribing && (
+                            <View style={styles.transcribingStatus}>
+                                <ActivityIndicator size="small" color="#2f855a" />
+                                <Text style={styles.transcribingText}>AI is transcribing & parsing audio...</Text>
+                            </View>
+                        )}
 
                         <View style={{ height: 12 }} />
 
@@ -200,20 +358,83 @@ const styles = StyleSheet.create({
     modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
     modalTitle: { fontSize: 18, fontWeight: '800', color: '#111827' },
     cancelText: { color: 'blue', fontWeight: '700' },
+    inputRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        width: '100%',
+    },
     taskInputModal: {
-        height: 42,
-        maxHeight: 42,
-        minHeight: 42,
+        flex: 1,
+        height: 48,
         paddingHorizontal: 12,
-        paddingVertical: 8,
         fontSize: 16,
-        textAlignVertical: 'center',
         backgroundColor: '#f9fafb',
         borderRadius: 14,
         borderWidth: 1,
         borderColor: '#e5e7eb',
         textAlign: 'left',
         color: '#1f2937',
+    },
+    micBtn: {
+        width: 48,
+        height: 48,
+        borderRadius: 24,
+        backgroundColor: '#f3f4f6',
+        borderWidth: 1,
+        borderColor: '#e5e7eb',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    micBtnActive: {
+        backgroundColor: '#fee2e2',
+        borderColor: '#ef4444',
+    },
+    micBtnDisabled: {
+        opacity: 0.5,
+    },
+    micBtnText: {
+        fontSize: 20,
+    },
+    recordingStatus: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: '#fef2f2',
+        borderWidth: 1,
+        borderColor: '#fecaca',
+        borderRadius: 10,
+        padding: 10,
+        marginTop: 10,
+        gap: 8,
+    },
+    redDot: {
+        width: 10,
+        height: 10,
+        borderRadius: 5,
+        backgroundColor: '#ef4444',
+    },
+    recordingText: {
+        color: '#b91c1c',
+        fontSize: 14,
+        fontWeight: '600',
+    },
+    transcribingStatus: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: '#ecfdf5',
+        borderWidth: 1,
+        borderColor: '#a7f3d0',
+        borderRadius: 10,
+        padding: 10,
+        marginTop: 10,
+        gap: 8,
+    },
+    transcribingText: {
+        color: '#065f46',
+        fontSize: 14,
+        fontWeight: '600',
     },
     actionRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 },
     modalHalfBtn: { flex: 1, minHeight: 44, borderRadius: 12, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f3f4f6', paddingHorizontal: 10 },
