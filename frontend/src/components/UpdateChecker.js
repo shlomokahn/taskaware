@@ -3,6 +3,8 @@ import { Alert, View, Text, TouchableOpacity, Modal, StyleSheet, ActivityIndicat
 import * as Updates from 'expo-updates';
 import * as Application from 'expo-application';
 
+const JS_VERSION = '1.0.9';
+
 export default function UpdateChecker({ API_BASE }) {
     const [updateAvailable, setUpdateAvailable] = useState(false);
     const [updateInfo, setUpdateInfo] = useState(null);
@@ -18,7 +20,7 @@ export default function UpdateChecker({ API_BASE }) {
 
     const checkForUpdates = async () => {
         try {
-            const currentVersion = Application.nativeApplicationVersion; // e.g., "1.0.0"
+            const currentVersion = JS_VERSION;
 
             const response = await fetch(
                 `${API_BASE}/api/check-update/?current_version=${currentVersion}`

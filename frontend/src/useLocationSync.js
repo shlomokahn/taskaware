@@ -12,22 +12,46 @@ export const useLocationSync = (API_BASE, token) => {
             const geocode = await Location.reverseGeocodeAsync({ latitude, longitude });
             if (geocode && geocode.length > 0) {
                 const item = geocode[0];
-                const parts = [];
-                if (item.street) {
-                    parts.push(item.street + (item.streetNumber ? ` ${item.streetNumber}` : ''));
-                }
-                if (item.city) {
-                    parts.push(item.city);
-                }
-                if (parts.length === 0 && item.name) {
-                    parts.push(item.name);
-                }
-                return parts.join(', ') || 'Unknown Location';
+                const streetStr = item.street ? `${item.street}${item.streetNumber ? ` ${item.streetNumber}` : ''}` : '';
+                const cityStr = item.city || '';
+                const addressStr = [streetStr, cityStr].filter(Boolean).join(' ');
+                if (addressStr) return addressStr;
+                if (item.name) return item.name;
             }
         } catch (error) {
-            console.log('Error reverse geocoding location:', error);
+            console.log('Error reverse geocoding location with Expo:', error);
         }
-        return `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
+
+        // Fallback to OpenStreetMap Nominatim API if native geocoding is unavailable or returns nothing
+        try {
+            console.log('Attempting Nominatim fallback geocoding...');
+            const res = await fetch(
+                `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${latitude}&lon=${longitude}&accept-language=he`,
+                {
+                    headers: {
+                        'User-Agent': 'TaskAwareApp/1.0'
+                    }
+                }
+            );
+            if (res.ok) {
+                const data = await res.json();
+                if (data && data.address) {
+                    const addr = data.address;
+                    const road = addr.road || addr.street || addr.suburb || addr.pedestrian || '';
+                    const houseNumber = addr.house_number || '';
+                    const city = addr.city || addr.town || addr.village || addr.city_district || '';
+                    
+                    const streetStr = road ? `${road}${houseNumber ? ` ${houseNumber}` : ''}` : '';
+                    const addressStr = [streetStr, city].filter(Boolean).join(' ');
+                    if (addressStr) return addressStr;
+                    if (data.display_name) return data.display_name;
+                }
+            }
+        } catch (err) {
+            console.log('Nominatim geocoding error:', err);
+        }
+
+        return 'Location updated';
     };
 
     const syncLocation = async () => {
@@ -57,9 +81,12 @@ export const useLocationSync = (API_BASE, token) => {
 
             setLocation(loc);
 
-            // Resolve geocode address name
-            const addressName = await getAddressName(loc.coords.latitude, loc.coords.longitude);
-            setLocationName(addressName);
+            // Resolve geocode address name asynchronously without blocking
+            getAddressName(loc.coords.latitude, loc.coords.longitude).then(addressName => {
+                setLocationName(addressName);
+            }).catch(err => {
+                console.log('Geocoding error:', err);
+            });
 
             const res = await fetch(`${API_BASE}/api/location/`, {
                 method: 'PATCH',
@@ -120,8 +147,11 @@ export const useLocationSync = (API_BASE, token) => {
                         console.log('📍 Foreground location moved > 150m, syncing...');
                         setLocation(newLoc);
 
-                        const addressName = await getAddressName(newLoc.coords.latitude, newLoc.coords.longitude);
-                        setLocationName(addressName);
+                        getAddressName(newLoc.coords.latitude, newLoc.coords.longitude).then(addressName => {
+                            if (active) setLocationName(addressName);
+                        }).catch(err => {
+                            console.log('Geocoding error:', err);
+                        });
 
                         try {
                             await fetch(`${API_BASE}/api/location/`, {

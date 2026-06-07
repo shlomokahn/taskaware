@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, FlatList, TouchableOpacity, RefreshControl, StyleSheet, TextInput, ScrollView } from 'react-native';
+import { View, Text, FlatList, TouchableOpacity, RefreshControl, StyleSheet, TextInput, ScrollView, ActivityIndicator } from 'react-native';
 import SwipeableRow from '../components/SwipeableRow';
 
 export default function HomeScreen({ 
@@ -194,7 +194,7 @@ export default function HomeScreen({
                     <Text style={styles.locationLabel}>Device Location</Text>
                     <Text style={styles.locationCoords}>
                         {currentLocationName || (currentLocation?.coords 
-                            ? `${currentLocation.coords.latitude.toFixed(4)}, ${currentLocation.coords.longitude.toFixed(4)}`
+                            ? 'Resolving address...' 
                             : 'Acquiring location...')}
                     </Text>
                 </View>
@@ -203,9 +203,11 @@ export default function HomeScreen({
                     onPress={onSyncLocation}
                     disabled={isLocationSyncing}
                 >
-                    <Text style={styles.syncButtonText}>
-                        {isLocationSyncing ? '🔄 Syncing...' : '🔄 Sync Now'}
-                    </Text>
+                    {isLocationSyncing ? (
+                        <ActivityIndicator size="small" color="#059669" />
+                    ) : (
+                        <Text style={styles.syncButtonText}>🔄</Text>
+                    )}
                 </TouchableOpacity>
             </View>
 
@@ -337,10 +339,9 @@ const styles = StyleSheet.create({
         backgroundColor: '#ecfdf5',
         borderWidth: 1,
         borderColor: '#059669',
-        borderRadius: 10,
-        paddingVertical: 8,
-        paddingHorizontal: 12,
-        flexDirection: 'row',
+        borderRadius: 20,
+        width: 40,
+        height: 40,
         alignItems: 'center',
         justifyContent: 'center',
     },
@@ -349,7 +350,7 @@ const styles = StyleSheet.create({
     },
     syncButtonText: {
         color: '#059669',
-        fontSize: 13,
+        fontSize: 18,
         fontWeight: '700',
     },
 
