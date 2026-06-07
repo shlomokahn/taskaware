@@ -15,7 +15,7 @@ import {
 import DateTimePicker, { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
 import { Audio } from 'expo-av';
 
-export default function AddTaskModal({ visible, onClose, onAddTask, creating, token, API_BASE, onVoiceTaskCreated }) {
+export default function AddTaskModal({ visible, onClose, onAddTask, creating, token, API_BASE, onVoiceTaskCreated, currentLocation }) {
     const [title, setTitle] = useState('');
     const [reminderDate, setReminderDate] = useState(null);
     const [showReminderPicker, setShowReminderPicker] = useState(false);
@@ -124,6 +124,10 @@ export default function AddTaskModal({ visible, onClose, onAddTask, creating, to
                 type: mimeType,
             });
             formData.append('deviceTime', localISOTime);
+            if (currentLocation && currentLocation.coords) {
+                formData.append('latitude', currentLocation.coords.latitude.toString());
+                formData.append('longitude', currentLocation.coords.longitude.toString());
+            }
 
             console.log('Uploading audio to server...');
             const res = await fetch(`${API_BASE}/api/tasks/create-from-voice/`, {

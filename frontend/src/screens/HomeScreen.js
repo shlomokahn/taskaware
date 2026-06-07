@@ -15,7 +15,10 @@ export default function HomeScreen({
     onToggleTaskComplete,
     onDeleteTask,
     onSyncLocation,
-    isLocationSyncing
+    isLocationSyncing,
+    suggestedReminders = [],
+    onApplySuggestedReminder,
+    onDismissSuggestedReminder
 }) {
     const [contexts, setContexts] = useState([]);
     const [searchQuery, setSearchQuery] = useState('');
@@ -211,6 +214,42 @@ export default function HomeScreen({
                 </TouchableOpacity>
             </View>
 
+            {/* Suggested Reminders */}
+            {suggestedReminders && suggestedReminders.map(suggestion => {
+                const formatSuggestionDesc = () => {
+                    const d = new Date(suggestion.suggestedDueDate);
+                    if (isNaN(d.getTime())) return '';
+                    const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+                    const dayName = days[d.getDay()];
+                    const timeStr = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+                    const contextName = (suggestion.requiredContext || suggestion.locationQuery || '').toUpperCase();
+                    return `You usually visit ${contextName} on ${dayName} at ${timeStr}. Set reminder?`;
+                };
+
+                return (
+                    <View key={suggestion.taskId} style={styles.suggestionBanner}>
+                        <View style={styles.suggestionTextContainer}>
+                            <Text style={styles.suggestionTitle}>📍 Habit Match: "{suggestion.title}"</Text>
+                            <Text style={styles.suggestionDesc}>{formatSuggestionDesc()}</Text>
+                        </View>
+                        <View style={styles.suggestionActions}>
+                            <TouchableOpacity 
+                                style={styles.suggestionAcceptBtn} 
+                                onPress={() => onApplySuggestedReminder(suggestion.taskId, suggestion.suggestedDueDate)}
+                            >
+                                <Text style={styles.suggestionAcceptText}>Set</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity 
+                                style={styles.suggestionDismissBtn} 
+                                onPress={() => onDismissSuggestedReminder(suggestion.taskId)}
+                            >
+                                <Text style={styles.suggestionDismissText}>✕</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                );
+            })}
+
             <Text style={styles.listTitle}>My Tasks</Text>
             
             <FlatList
@@ -368,4 +407,67 @@ const styles = StyleSheet.create({
     checkMark: { color: '#fff', fontSize: 16 },
     emptyState: { alignItems: 'center', marginTop: 40 },
     emptyStateText: { fontSize: 16, color: '#9ca3af' },
+    suggestionBanner: {
+        backgroundColor: '#f3e8ff',
+        borderColor: '#c084fc',
+        borderWidth: 1,
+        borderRadius: 20,
+        padding: 16,
+        marginHorizontal: 20,
+        marginBottom: 15,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        shadowColor: '#a855f7',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.1,
+        shadowRadius: 6,
+        elevation: 3,
+    },
+    suggestionTextContainer: {
+        flex: 1,
+        marginRight: 10,
+    },
+    suggestionTitle: {
+        fontSize: 14,
+        fontWeight: '800',
+        color: '#7e22ce',
+        marginBottom: 2,
+    },
+    suggestionDesc: {
+        fontSize: 13,
+        color: '#6b21a8',
+        fontWeight: '600',
+    },
+    suggestionActions: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+    },
+    suggestionAcceptBtn: {
+        backgroundColor: '#7e22ce',
+        borderRadius: 12,
+        paddingVertical: 8,
+        paddingHorizontal: 14,
+    },
+    suggestionAcceptText: {
+        color: '#fff',
+        fontSize: 13,
+        fontWeight: '700',
+    },
+    suggestionDismissBtn: {
+        width: 28,
+        height: 28,
+        borderRadius: 14,
+        backgroundColor: '#faf5ff',
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: '#e9d5ff',
+    },
+    suggestionDismissText: {
+        color: '#a855f7',
+        fontSize: 12,
+        fontWeight: '800',
+    },
 });

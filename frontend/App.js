@@ -105,6 +105,7 @@ function AppContent() {
     const [showAddModal, setShowAddModal] = useState(false);
     const [pendingContexts, setPendingContexts] = useState([]);
     const [activeContext, setActiveContext] = useState(null);
+    const [suggestedReminders, setSuggestedReminders] = useState([]);
 
     const [token, setToken] = useState(null);
     const [username, setUsername] = useState('');
@@ -283,13 +284,19 @@ function AppContent() {
             const pad = (num) => String(num).padStart(2, '0');
             const localISOTime = new Date(Date.now() + tzOffset * 60000).toISOString().slice(0, -5) + diff + pad(Math.floor(Math.abs(tzOffset) / 60)) + ':' + pad(Math.abs(tzOffset) % 60);
 
+            const payload = {
+                title: taskTitle,
+                deviceTime: localISOTime
+            };
+            if (location && location.coords) {
+                payload.latitude = location.coords.latitude;
+                payload.longitude = location.coords.longitude;
+            }
+
             const res = await fetch(`${API_BASE}/api/ask-ai/`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Token ${token}` },
-                body: JSON.stringify({
-                    title: taskTitle,
-                    deviceTime: localISOTime
-                }),
+                body: JSON.stringify(payload),
             });
             if (!res.ok) return null;
             const data = await res.json();
@@ -306,36 +313,61 @@ function AppContent() {
         setCreating(true);
         try {
             const aiData = await fetchLocationFromAI(titleTrimmed);
-            
-            let activeReminderDate = reminderDatePassed;
-            if (!activeReminderDate && aiData?.dueDate) {
-                const parsedDate = new Date(aiData.dueDate);
-                if (!isNaN(parsedDate.getTime()) && parsedDate > new Date()) {
-                    activeReminderDate = parsedDate;
-                }
-            }
-
-            const notifId = activeReminderDate ? await scheduleNotification(titleTrimmed, activeReminderDate) : null;
-            const payload = {
+            const tasksToCreate = (aiData && Array.isArray(aiData)) ? aiData : [{
                 title: titleTrimmed,
-                notificationId: notifId,
-                locationQuery: aiData?.locationQuery || null,
-                requiredContext: aiData?.requiredContext || null,
-                contextCondition: aiData?.contextCondition || null,
-            };
-            if (activeReminderDate) {
-                payload.dueDate = activeReminderDate.toISOString();
+                locationQuery: null,
+                requiredContext: null,
+                contextCondition: null,
+                dueDate: reminderDatePassed ? reminderDatePassed.toISOString() : null,
+                suggestedDueDate: null
+            }];
+
+            for (const item of tasksToCreate) {
+                let activeReminderDate = reminderDatePassed;
+                if (!activeReminderDate && item.dueDate) {
+                    const parsedDate = new Date(item.dueDate);
+                    if (!isNaN(parsedDate.getTime()) && parsedDate > new Date()) {
+                        activeReminderDate = parsedDate;
+                    }
+                }
+
+                const notifId = activeReminderDate ? await scheduleNotification(item.title, activeReminderDate) : null;
+                const payload = {
+                    title: item.title,
+                    notificationId: notifId,
+                    locationQuery: item.locationQuery || null,
+                    requiredContext: item.requiredContext || null,
+                    contextCondition: item.contextCondition || null,
+                };
+                if (activeReminderDate) {
+                    payload.dueDate = activeReminderDate.toISOString();
+                }
+                const res = await fetch(`${API_BASE}/api/tasks/`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Token ${token}` },
+                    body: JSON.stringify(payload),
+                });
+                if (!res.ok) throw new Error('Failed to save task');
+                const created = await res.json();
+                
+                if (item.suggestedDueDate && !activeReminderDate) {
+                    setSuggestedReminders(prev => [
+                        ...prev,
+                        {
+                            taskId: created.id || created._id,
+                            title: created.title,
+                            requiredContext: created.requiredContext,
+                            locationQuery: created.locationQuery,
+                            suggestedDueDate: item.suggestedDueDate
+                        }
+                    ]);
+                }
+                
+                setTasks(prev => [created, ...prev]);
+                await inferTaskContext(created.title);
             }
-            const res = await fetch(`${API_BASE}/api/tasks/`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': `Token ${token}` },
-                body: JSON.stringify(payload),
-            });
-            if (!res.ok) throw new Error('Failed to save task');
-            const created = await res.json();
-            setTasks(prev => [created, ...prev]);
+            
             setShowAddModal(false);
-            await inferTaskContext(titleTrimmed);
         } catch (err) {
             Alert.alert('Error', 'Error saving the task');
             console.error(err);
@@ -344,31 +376,69 @@ function AppContent() {
         }
     };
 
-    const handleVoiceTaskCreated = async (createdTask) => {
+    const handleVoiceTaskCreated = async (createdTasksList) => {
         try {
-            let finalTask = createdTask;
-            if (createdTask.dueDate) {
-                const triggerDate = new Date(createdTask.dueDate);
-                if (!isNaN(triggerDate.getTime()) && triggerDate > new Date()) {
-                    const notifId = await scheduleNotification(createdTask.title, triggerDate);
-                    if (notifId) {
-                        const updated = await handleUpdateTask(createdTask._id || createdTask.id, {
-                            notificationId: notifId
-                        });
-                        if (updated) {
-                            finalTask = updated;
+            const list = Array.isArray(createdTasksList) ? createdTasksList : [createdTasksList];
+            for (const createdTask of list) {
+                let finalTask = createdTask;
+                if (createdTask.dueDate) {
+                    const triggerDate = new Date(createdTask.dueDate);
+                    if (!isNaN(triggerDate.getTime()) && triggerDate > new Date()) {
+                        const notifId = await scheduleNotification(createdTask.title, triggerDate);
+                        if (notifId) {
+                            const updated = await handleUpdateTask(createdTask._id || createdTask.id, {
+                                notificationId: notifId
+                            });
+                            if (updated) {
+                                finalTask = updated;
+                            }
                         }
                     }
+                } else if (createdTask.suggestedDueDate) {
+                    setSuggestedReminders(prev => [
+                        ...prev,
+                        {
+                            taskId: createdTask.id || createdTask._id,
+                            title: createdTask.title,
+                            requiredContext: createdTask.requiredContext,
+                            locationQuery: createdTask.locationQuery,
+                            suggestedDueDate: createdTask.suggestedDueDate
+                        }
+                    ]);
                 }
+                setTasks(prev => [finalTask, ...prev]);
+                await inferTaskContext(finalTask.title);
             }
-            setTasks(prev => [finalTask, ...prev]);
             setShowAddModal(false);
-            await inferTaskContext(finalTask.title);
         } catch (error) {
             console.error('Error handling voice task completion:', error);
-            setTasks(prev => [createdTask, ...prev]);
+            if (createdTasksList) {
+                const list = Array.isArray(createdTasksList) ? createdTasksList : [createdTasksList];
+                setTasks(prev => [...list, ...prev]);
+            }
             setShowAddModal(false);
         }
+    };
+
+    const handleApplySuggestedReminder = async (taskId, suggestedDate) => {
+        try {
+            const task = tasks.find(t => (t._id || t.id) === taskId);
+            if (!task) return;
+            const notifId = await scheduleNotification(task.title, new Date(suggestedDate));
+            await handleUpdateTask(taskId, {
+                dueDate: suggestedDate,
+                notificationId: notifId
+            });
+            setSuggestedReminders(prev => prev.filter(s => s.taskId !== taskId));
+            Alert.alert('Success', 'Reminder set based on your habit! ⏰');
+        } catch (error) {
+            console.error('Error applying suggestion:', error);
+            Alert.alert('Error', 'Failed to set reminder.');
+        }
+    };
+
+    const handleDismissSuggestedReminder = (taskId) => {
+        setSuggestedReminders(prev => prev.filter(s => s.taskId !== taskId));
     };
 
     const handleUpdateTask = async (taskId, fields) => {
@@ -497,6 +567,9 @@ function AppContent() {
             onDeleteTask={handleDeleteTask}
             onSyncLocation={syncLocation}
             isLocationSyncing={isSyncing}
+            suggestedReminders={suggestedReminders}
+            onApplySuggestedReminder={handleApplySuggestedReminder}
+            onDismissSuggestedReminder={handleDismissSuggestedReminder}
         />
     );
 
@@ -607,6 +680,7 @@ function AppContent() {
                 token={token}
                 API_BASE={API_BASE}
                 onVoiceTaskCreated={handleVoiceTaskCreated}
+                currentLocation={location}
             />
 
             <ContextPromptModal

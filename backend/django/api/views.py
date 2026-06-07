@@ -850,23 +850,52 @@ class TaskViewSet(viewsets.ModelViewSet):
             audio_bytes = file_obj.read()
             mime_type = file_obj.content_type or 'audio/mp4'
             device_time = request.data.get('deviceTime')
+            lat = request.data.get('latitude') or request.data.get('lat')
+            lng = request.data.get('longitude') or request.data.get('lng')
             
-            ai_data = parse_voice_message_with_ai(audio_bytes, mime_type=mime_type, device_time=device_time, user=request.user)
-            if not ai_data or not ai_data.get('title'):
+            ai_data_list = parse_voice_message_with_ai(
+                audio_bytes,
+                mime_type=mime_type,
+                device_time=device_time,
+                user=request.user,
+                latitude=lat,
+                longitude=lng
+            )
+            if not ai_data_list:
                 return Response({'error': 'AI failed to parse the voice recording'}, status=status.HTTP_422_UNPROCESSABLE_ENTITY)
                 
-            serializer_data = {
-                'title': ai_data.get('title'),
-                'dueDate': ai_data.get('dueDate'),
-                'locationQuery': ai_data.get('locationQuery'),
-                'requiredContext': ai_data.get('requiredContext'),
-                'contextCondition': ai_data.get('contextCondition'),
-            }
-            serializer = self.get_serializer(data=serializer_data)
-            serializer.is_valid(raise_exception=True)
-            task = serializer.save(user=request.user)
-            
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
+            created_tasks_data = []
+            for ai_data in ai_data_list:
+                location_query = ai_data.get('locationQuery')
+                required_context = ai_data.get('requiredContext')
+                due_date = ai_data.get('dueDate')
+                
+                if not location_query and not required_context and not due_date:
+                    ai_data['locationQuery'] = 'supermarket'
+                    location_query = 'supermarket'
+                    
+                serializer_data = {
+                    'title': ai_data.get('title') or 'Voice Task',
+                    'dueDate': due_date,
+                    'locationQuery': location_query,
+                    'requiredContext': required_context,
+                    'contextCondition': ai_data.get('contextCondition'),
+                }
+                serializer = self.get_serializer(data=serializer_data)
+                serializer.is_valid(raise_exception=True)
+                task = serializer.save(user=request.user)
+                
+                serialized_dict = serializer.data
+                suggested_due_date = None
+                if not due_date:
+                    predict_key = required_context or location_query
+                    if predict_key:
+                        suggested_due_date = predict_next_visit(request.user, predict_key.strip().lower())
+                
+                serialized_dict['suggestedDueDate'] = suggested_due_date
+                created_tasks_data.append(serialized_dict)
+                
+            return Response(created_tasks_data, status=status.HTTP_201_CREATED)
         except Exception as e:
             print("Error in create_from_voice:", str(e))
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -919,6 +948,73 @@ ANCHOR_MAP = {
     'school': UserContext.ContextKey.SCHOOL,
     'gym': UserContext.ContextKey.GYM,
 }
+
+
+from collections import Counter
+
+def predict_next_visit(user, context_key):
+    if not user or not user.is_authenticated or not context_key:
+        return None
+    try:
+        visits = UserContextVisit.objects.filter(
+            user=user,
+            context_key=context_key,
+            was_visited=True,
+            last_visited_at__isnull=False
+        ).order_by('-last_visited_at')[:30]
+        
+        if visits.count() < 3:
+            return None
+            
+        days = [v.last_visited_at.weekday() for v in visits]
+        hours = [v.last_visited_at.hour for v in visits]
+        
+        most_common_day = Counter(days).most_common(1)[0][0]
+        most_common_hour = Counter(hours).most_common(1)[0][0]
+        
+        # Predict the next occurrence of this day of week and hour
+        today = timezone.localtime(timezone.now())
+        days_ahead = most_common_day - today.weekday()
+        if days_ahead < 0:
+            days_ahead += 7
+        elif days_ahead == 0 and today.hour >= most_common_hour:
+            days_ahead += 7
+            
+        predicted_date = today.date() + datetime.timedelta(days=days_ahead)
+        predicted_datetime = datetime.datetime.combine(predicted_date, datetime.time(hour=most_common_hour))
+        predicted_datetime = timezone.make_aware(predicted_datetime, timezone.get_current_timezone())
+        
+        return predicted_datetime.isoformat()
+    except Exception as e:
+        print("Error predicting next visit:", str(e))
+        return None
+
+
+def get_nearby_places_prompt_context(lat, lng):
+    if not lat or not lng or not GOOGLE_PLACES_API_KEY:
+        return ""
+    try:
+        url = "https://maps.googleapis.com/maps/api/place/nearbysearch/json"
+        params = {
+            "location": f"{lat},{lng}",
+            "radius": "150",
+            "key": GOOGLE_PLACES_API_KEY
+        }
+        query_string = urllib.parse.urlencode(params)
+        req = urllib.request.Request(f"{url}?{query_string}")
+        with urllib.request.urlopen(req, timeout=10) as response:
+            res_data = json.loads(response.read().decode('utf-8'))
+            results = res_data.get("results", [])
+            places_str = []
+            for r in results[:5]:
+                name = r.get("name")
+                types = r.get("types", [])
+                primary_type = types[0] if types else "establishment"
+                places_str.append(f"{name} ({primary_type})")
+            return ", ".join(places_str)
+    except Exception as e:
+        print("Error getting nearby places for prompt context:", str(e))
+        return ""
 
 
 def get_user_context_choices(user):
@@ -1004,6 +1100,8 @@ def infer_context(request):
 def ask_ai(request):
     title = request.data.get('title')
     device_time = request.data.get('deviceTime')
+    lat = request.data.get('latitude')
+    lng = request.data.get('longitude')
 
     if not title:
         return Response({"error": "חסר שם משימה"}, status=400)
@@ -1014,49 +1112,60 @@ def ask_ai(request):
         choices = get_user_context_choices(request.user)
         choices_str = ", ".join([f"'{c}'" for c in choices])
 
+        nearby_places_str = ""
+        if lat and lng:
+            nearby_places_str = get_nearby_places_prompt_context(float(lat), float(lng))
+
+        nearby_context = ""
+        if nearby_places_str:
+            nearby_context = f"\nUser's Current Nearby Places (radius 150m): {nearby_places_str}\n"
+
         prompt = f"""You are a smart assistant for a task management app. The user will give you a task description in Hebrew or English.
-Analyze it and return a valid JSON object ONLY. Do not write any markdown formatting, do not write ```json ... ```, do not write explanations.
+Analyze it and return a valid JSON array of task objects ONLY. Do not write any markdown formatting, do not write ```json ... ```, do not write explanations.
+If the description contains multiple tasks (e.g. "buy milk and deposit check"), split them into separate objects in the array. If there is only one task, return an array with one object.
 
 Task: '{title}'
-
-JSON Schema:
-{{
-  "locationQuery": "place type in English. Map tasks semantically to one of these category keys if they are related:
-   - 'supermarket': for groceries, shopping, food, milk, cheese, cottage, eggs, vegetables, fruits, bread, shampoo, soap, grocery items
-   - 'pharmacy': for medications, pharmacy, pills, drugs, prescription, acamol, advil
-   - 'post_office': for packages, mail, letters, stamps, post office
-   - 'bank': for bank, depositing checks, loans
-   - 'atm': for cash, withdraw, ATM
-   - 'cafe': for coffee, cafe, espresso
-   - 'restaurant': for dinner, lunch, restaurant, meals, food menu, pizza, sushi, hamburger
-   - 'gym': for workout, training, fitness, gym, exercise
-   - 'bakery': for bread, cake, bakery, croissant, challah, pita
-   - 'hardware_store': for tools, screws, keys, replica keys, hammer, hardware store, repair
-   - 'electronics_store': for cables, charger, phone charger, electronics, computer repair, USB cable, headphones
-   - 'library': for books, study, library
-   - 'print_shop': for printing, copying, scanning
-   - 'park': for park, running, nature
-   Or null if the task is not related to a physical place category. Be extremely smart and classify specific products/items to their corresponding category, even if the category name itself is not mentioned.",
-  "requiredContext": "context key if mentioned, else null (choices: {choices_str})",
-  "contextCondition": "relation to context if mentioned, else null (choices: 'before', 'during', 'after')",
-  "dueDate": "ISO 8601 date time string if date/time is mentioned relative to current time, else null"
-}}
+{nearby_context}
+JSON Schema (Return a JSON Array of this object):
+[
+  {{
+    "title": "Clean, concise task description / title in its original language (Hebrew or English)",
+    "locationQuery": "place type or specific business name in English. Map tasks semantically to one of these category keys if they are related:
+     - 'supermarket': for groceries, shopping, food, milk, cheese, cottage, eggs, vegetables, fruits, bread, shampoo, soap, grocery items
+     - 'pharmacy': for medications, pharmacy, pills, drugs, prescription, acamol, advil
+     - 'post_office': for packages, mail, letters, stamps, post office
+     - 'bank': for bank, depositing checks, loans
+     - 'atm': for cash, withdraw, ATM
+     - 'cafe': for coffee, cafe, espresso
+     - 'restaurant': for dinner, lunch, restaurant, meals, food menu, pizza, sushi, hamburger
+     - 'gym': for workout, training, fitness, gym, exercise
+     - 'bakery': for bread, cake, bakery, croissant, challah, pita
+     - 'hardware_store': for tools, screws, keys, replica keys, hammer, hardware store, repair
+     - 'electronics_store': for cables, charger, phone charger, electronics, computer repair, USB cable, headphones
+     - 'library': for books, study, library
+     - 'print_shop': for printing, copying, scanning
+     - 'park': for park, running, nature
+     Or null if the task is not related to a physical place category. Be extremely smart and classify specific products/items to their corresponding category, even if the category name itself is not mentioned.
+     If the user specifies a relative location like 'here', 'nearby', 'this place' (כאן, פה, לידי, לידנו) and you have a 'User's Current Nearby Places' list above, match it to the most relevant place name or category from that list.",
+    "requiredContext": "context key if mentioned, else null (choices: {choices_str})",
+    "contextCondition": "relation to context if mentioned, else null (choices: 'before', 'during', 'after')",
+    "dueDate": "ISO 8601 date time string if date/time is mentioned relative to current time, else null"
+  }}
+]
 
 Current Time Context: {current_time_str}
 
 Examples:
-- "לקנות חלב וגבינה אחרי העבודה" -> {{"locationQuery": "supermarket", "requiredContext": "work", "contextCondition": "after", "dueDate": null}}
-- "לקנות אקמול" -> {{"locationQuery": "pharmacy", "requiredContext": null, "contextCondition": null, "dueDate": null}}
-- "לשכפל מפתח" -> {{"locationQuery": "hardware_store", "requiredContext": null, "contextCondition": null, "dueDate": null}}
-- "ללמוד למבחן בספרייה לפני הלימודים" -> {{"locationQuery": "library", "requiredContext": "school", "contextCondition": "before", "dueDate": null}}
-- "למשוך כסף" -> {{"locationQuery": "atm", "requiredContext": null, "contextCondition": null, "dueDate": null}}
-- "להפקיד צ'ק בבנק" -> {{"locationQuery": "bank", "requiredContext": "bank", "contextCondition": "during", "dueDate": null}}
-- "לקנות קוטג' וקשקבל מחר בבוקר" -> {{"locationQuery": "supermarket", "requiredContext": null, "contextCondition": null, "dueDate": "2026-06-08T08:00:00"}}
-- "לקנות שמפו לשיער וסבון כלים" -> {{"locationQuery": "supermarket", "requiredContext": null, "contextCondition": null, "dueDate": null}}
-- "לקנות כבל מטען לטלפון" -> {{"locationQuery": "electronics_store", "requiredContext": null, "contextCondition": null, "dueDate": null}}
-- "לקנות קרואסון חם" -> {{"locationQuery": "bakery", "requiredContext": null, "contextCondition": null, "dueDate": null}}
-- "לשלוח מכתב בדואר" -> {{"locationQuery": "post_office", "requiredContext": null, "contextCondition": null, "dueDate": null}}
-- "לחייג לאמא מחר ב10 בבוקר" -> {{"locationQuery": null, "requiredContext": null, "contextCondition": null, "dueDate": "2026-06-08T10:00:00"}}
+- "לקנות חלב וגבינה אחרי העבודה" -> [{{"title": "לקנות חלב וגבינה", "locationQuery": "supermarket", "requiredContext": "work", "contextCondition": "after", "dueDate": null}}]
+- "לקנות אדוויל מחר בבוקר ולמשוך כסף" -> [
+    {{"title": "לקנות אדוויל", "locationQuery": "pharmacy", "requiredContext": null, "contextCondition": null, "dueDate": "2026-06-08T08:00:00"}},
+    {{"title": "למשוך כסף", "locationQuery": "atm", "requiredContext": null, "contextCondition": null, "dueDate": null}}
+  ]
+- "לקנות קפה כאן" (when Aroma (cafe) is nearby) -> [{{"title": "לקנות קפה כאן", "locationQuery": "Aroma", "requiredContext": "cafe", "contextCondition": "during", "dueDate": null}}]
+- "ללמוד למבחן בספרייה לפני הלימודים" -> [{{"title": "ללמוד למבחן בספרייה", "locationQuery": "library", "requiredContext": "school", "contextCondition": "before", "dueDate": null}}]
+- "לקנות קרואסון חם" -> [{{"title": "לקנות קרואסון חם", "locationQuery": "bakery", "requiredContext": null, "contextCondition": null, "dueDate": null}}]
+- "להפקיד צ'ק בבנק" -> [{{"title": "להפקיד צ'ק בבנק", "locationQuery": "bank", "requiredContext": "bank", "contextCondition": "during", "dueDate": null}}]
+- "לחייג לאמא מחר ב10 בבוקר" -> [{{"title": "לחייג לאמא", "locationQuery": null, "requiredContext": null, "contextCondition": null, "dueDate": "2026-06-08T10:00:00"}}]
 """
 
         response = client.models.generate_content(
@@ -1073,48 +1182,56 @@ Examples:
                 lines = lines[:-1]
             response_text = "\n".join(lines).strip()
 
-        location_query = None
-        required_context = None
-        context_condition = None
-
-        due_date_str = None
+        tasks_list = []
         try:
             parsed = json.loads(response_text)
-            location_query = parsed.get("locationQuery")
-            required_context = parsed.get("requiredContext")
-            context_condition = parsed.get("contextCondition")
-            due_date_str = parsed.get("dueDate")
+            if isinstance(parsed, list):
+                tasks_list = parsed
+            elif isinstance(parsed, dict):
+                tasks_list = [parsed]
         except Exception as json_err:
             print("Failed to parse JSON from Gemini response:", response_text, str(json_err))
-            location_query = response_text.replace('.', '').strip()
+            tasks_list = [{
+                "title": title,
+                "locationQuery": response_text.replace('.', '').strip(),
+                "requiredContext": None,
+                "contextCondition": None,
+                "dueDate": None
+            }]
 
-        # Fallback to defaults if empty
-        if not location_query and not required_context and not due_date_str:
-            location_query = "supermarket"
+        # Post-process tasks list: add default fallback and calculate suggestedDueDate
+        for task in tasks_list:
+            location_query = task.get("locationQuery")
+            required_context = task.get("requiredContext")
+            dueDate = task.get("dueDate")
+            
+            if not location_query and not required_context and not dueDate:
+                task["locationQuery"] = "supermarket"
+                location_query = "supermarket"
+                
+            # Step 3: suggestedDueDate prediction based on habits
+            task["suggestedDueDate"] = None
+            if not dueDate:
+                predict_key = required_context or location_query
+                if predict_key:
+                    task["suggestedDueDate"] = predict_next_visit(request.user, predict_key.strip().lower())
 
         try:
             profile = UserProfile.objects.get(user=request.user)
-            if profile.expo_push_token and location_query:
-                body_text = f"for the task '{title}', Search the area: {location_query}"
-                if required_context:
-                    cond_heb = {"after": "אחרי", "before": "לפני", "during": "בזמן"}.get(context_condition, "")
-                    ctx_heb = {"work": "העבודה", "home": "הבית", "school": "הלימודים", "gym": "חדר הכושר"}.get(required_context, required_context)
-                    body_text += f" ({cond_heb} {ctx_heb})"
-                send_expo_push_notification(
-                    expo_token=profile.expo_push_token,
-                    title="The AI ​​has found a location! 📍",
-                    body=body_text
-                )
+            if profile.expo_push_token:
+                notified_queries = [t.get("locationQuery") for t in tasks_list if t.get("locationQuery")]
+                if notified_queries:
+                    body_text = f"for the tasks, Search the area: {', '.join(notified_queries)}"
+                    send_expo_push_notification(
+                        expo_token=profile.expo_push_token,
+                        title="The AI ​​has found a location! 📍",
+                        body=body_text
+                    )
         except Exception as e:
             print("Push error in AI:", str(e))
 
-        print(f"AI Answered: locationQuery={location_query}, requiredContext={required_context}, contextCondition={context_condition}, dueDate={due_date_str}")
-        return Response({
-            "locationQuery": location_query,
-            "requiredContext": required_context,
-            "contextCondition": context_condition,
-            "dueDate": due_date_str
-        })
+        print(f"AI Answered: parsed {len(tasks_list)} tasks.")
+        return Response(tasks_list)
 
     except Exception as e:
         print("Gemini API Error details:", str(e))
@@ -1398,7 +1515,7 @@ def download_telegram_file(file_id):
         return None
 
 
-def parse_voice_message_with_ai(audio_bytes, mime_type='audio/ogg', device_time=None, user=None):
+def parse_voice_message_with_ai(audio_bytes, mime_type='audio/ogg', device_time=None, user=None, latitude=None, longitude=None):
     gemini_key = os.environ.get("GEMINI_API_KEY")
     if not gemini_key:
         return None
@@ -1411,45 +1528,62 @@ def parse_voice_message_with_ai(audio_bytes, mime_type='audio/ogg', device_time=
         choices_str = ", ".join([f"'{c}'" for c in choices])
         current_time_str = device_time if device_time else timezone.now().isoformat()
 
+        nearby_places_str = ""
+        if latitude and longitude:
+            nearby_places_str = get_nearby_places_prompt_context(float(latitude), float(longitude))
+
+        nearby_context = ""
+        if nearby_places_str:
+            nearby_context = f"\nUser's Current Nearby Places (radius 150m): {nearby_places_str}\n"
+
         prompt = f"""You are a smart assistant for a task management app.
 The user has provided a voice message (audio) in Hebrew or English.
 First, transcribe the voice message accurately.
 Second, analyze the transcription to extract structured task information.
-Return a valid JSON object ONLY. Do not write any markdown formatting, do not write ```json ... ```, do not write explanations.
+Return a valid JSON array of task objects ONLY. Do not write any markdown formatting, do not write ```json ... ```, do not write explanations.
+If the description contains multiple tasks (e.g. "buy milk and deposit check"), split them into separate objects in the array. If there is only one task, return an array with one object.
 
-JSON Schema:
-{{
-  "title": "the task description / transcription in its original language (Hebrew or English) - clean, concise task title",
-  "locationQuery": "place type in English. Map tasks semantically to one of these category keys if they are related:
-   - 'supermarket': for groceries, shopping, food, milk, cheese, cottage, eggs, vegetables, fruits, bread, shampoo, soap, grocery items
-   - 'pharmacy': for medications, pharmacy, pills, drugs, prescription, acamol, advil
-   - 'post_office': for packages, mail, letters, stamps, post office
-   - 'bank': for bank, depositing checks, loans
-   - 'atm': for cash, withdraw, ATM
-   - 'cafe': for coffee, cafe, espresso
-   - 'restaurant': for dinner, lunch, restaurant, meals, food menu, pizza, sushi, hamburger
-   - 'gym': for workout, training, fitness, gym, exercise
-   - 'bakery': for bread, cake, bakery, croissant, challah, pita
-   - 'hardware_store': for tools, screws, keys, replica keys, hammer, hardware store, repair
-   - 'electronics_store': for cables, charger, phone charger, electronics, computer repair, USB cable, headphones
-   - 'library': for books, study, library
-   - 'print_shop': for printing, copying, scanning
-   - 'park': for park, running, nature
-   Or null if the task is not related to a physical place category. Be extremely smart and classify specific products/items to their corresponding category, even if the category name itself is not mentioned.",
-  "requiredContext": "context key if mentioned, else null (choices: {choices_str})",
-  "contextCondition": "relation to context if mentioned, else null (choices: 'before', 'during', 'after')",
-  "dueDate": "ISO 8601 date time string if date/time is mentioned relative to current time, else null"
-}}
+{nearby_context}
+JSON Schema (Return a JSON Array of this object):
+[
+  {{
+    "title": "the task description / transcription in its original language (Hebrew or English) - clean, concise task title",
+    "locationQuery": "place type in English. Map tasks semantically to one of these category keys if they are related:
+     - 'supermarket': for groceries, shopping, food, milk, cheese, cottage, eggs, vegetables, fruits, bread, shampoo, soap, grocery items
+     - 'pharmacy': for medications, pharmacy, pills, drugs, prescription, acamol, advil
+     - 'post_office': for packages, mail, letters, stamps, post office
+     - 'bank': for bank, depositing checks, loans
+     - 'atm': for cash, withdraw, ATM
+     - 'cafe': for coffee, cafe, espresso
+     - 'restaurant': for dinner, lunch, restaurant, meals, food menu, pizza, sushi, hamburger
+     - 'gym': for workout, training, fitness, gym, exercise
+     - 'bakery': for bread, cake, bakery, croissant, challah, pita
+     - 'hardware_store': for tools, screws, keys, replica keys, hammer, hardware store, repair
+     - 'electronics_store': for cables, charger, phone charger, electronics, computer repair, USB cable, headphones
+     - 'library': for books, study, library
+     - 'print_shop': for printing, copying, scanning
+     - 'park': for park, running, nature
+     Or null if the task is not related to a physical place category. Be extremely smart and classify specific products/items to their corresponding category, even if the category name itself is not mentioned.
+     If the user specifies a relative location like 'here', 'nearby', 'this place' (כאן, פה, לידי, לידנו) and you have a 'User's Current Nearby Places' list above, match it to the most relevant place name or category from that list.",
+    "requiredContext": "context key if mentioned, else null (choices: {choices_str})",
+    "contextCondition": "relation to context if mentioned, else null (choices: 'before', 'during', 'after')",
+    "dueDate": "ISO 8601 date time string if date/time is mentioned relative to current time, else null"
+  }}
+]
 
 Current Time Context: {current_time_str}
 
 Examples:
-- Audio saying "לקנות חלב אחרי העבודה" -> {{"title": "לקנות חלב אחרי העבודה", "locationQuery": "supermarket", "requiredContext": "work", "contextCondition": "after", "dueDate": null}}
-- Audio saying "לקנות אקמול" -> {{"title": "לקנות אקמול", "locationQuery": "pharmacy", "requiredContext": null, "contextCondition": null, "dueDate": null}}
-- Audio saying "לעשות אימון כושר מחר בבוקר" -> {{"title": "לעשות אימון כושר מחר בבוקר", "locationQuery": "gym", "requiredContext": "gym", "contextCondition": "during", "dueDate": "2026-06-07T08:00:00"}}
-- Audio saying "לקנות קרואסון חם מאפייה" -> {{"title": "לקנות קרואסון חם מאפייה", "locationQuery": "bakery", "requiredContext": null, "contextCondition": null, "dueDate": null}}
-- Audio saying "לקנות קוטג' וקשקבל" -> {{"title": "לקנות קוטג' וקשקבל", "locationQuery": "supermarket", "requiredContext": null, "contextCondition": null, "dueDate": null}}
-- Audio saying "לקנות כבל מטען לטלפון" -> {{"title": "לקנות כבל מטען לטלפון", "locationQuery": "electronics_store", "requiredContext": null, "contextCondition": null, "dueDate": null}}
+- Audio saying "לקנות חלב אחרי העבודה" -> [{{"title": "לקנות חלב אחרי העבודה", "locationQuery": "supermarket", "requiredContext": "work", "contextCondition": "after", "dueDate": null}}]
+- Audio saying "לקנות אדוויל מחר בבוקר ולמשוך כסף" -> [
+    {{"title": "לקנות אדוויל מחר בבוקר", "locationQuery": "pharmacy", "requiredContext": null, "contextCondition": null, "dueDate": "2026-06-08T08:00:00"}},
+    {{"title": "למשוך כסף", "locationQuery": "atm", "requiredContext": null, "contextCondition": null, "dueDate": null}}
+  ]
+- Audio saying "לקנות קפה כאן" (when Aroma (cafe) is nearby) -> [{{"title": "לקנות קפה כאן", "locationQuery": "Aroma", "requiredContext": "cafe", "contextCondition": "during", "dueDate": null}}]
+- Audio saying "ללמוד למבחן בספרייה לפני הלימודים" -> [{{"title": "ללמוד למבחן בספרייה", "locationQuery": "library", "requiredContext": "school", "contextCondition": "before", "dueDate": null}}]
+- Audio saying "לקנות קרואסון חם" -> [{{"title": "לקנות קרואסון חם", "locationQuery": "bakery", "requiredContext": null, "contextCondition": null, "dueDate": null}}]
+- Audio saying "להפקיד צ'ק בבנק" -> [{{"title": "להפקיד צ'ק בבנק", "locationQuery": "bank", "requiredContext": "bank", "contextCondition": "during", "dueDate": null}}]
+- Audio saying "לחייג לאמא מחר ב10 בבוקר" -> [{{"title": "לחייג לאמא", "locationQuery": null, "requiredContext": null, "contextCondition": null, "dueDate": "2026-06-08T10:00:00"}}]
 """
 
         audio_part = types.Part.from_bytes(
@@ -1472,7 +1606,11 @@ Examples:
             response_text = "\n".join(lines).strip()
             
         parsed = json.loads(response_text)
-        return parsed
+        if isinstance(parsed, list):
+            return parsed
+        elif isinstance(parsed, dict):
+            return [parsed]
+        return None
     except Exception as e:
         print("Error in parse_voice_message_with_ai:", str(e))
         return None
@@ -1672,31 +1810,30 @@ def telegram_webhook(request):
             send_telegram_message(chat_id, "❌ <b>Failed to download voice note.</b> Please try again.")
             return Response({"status": "ok"})
             
-        ai_data = parse_voice_message_with_ai(audio_bytes, user=profile.user)
-        if not ai_data or not ai_data.get("title"):
+        ai_data_list = parse_voice_message_with_ai(audio_bytes, user=profile.user)
+        if not ai_data_list:
             send_telegram_message(chat_id, "❌ <b>AI failed to parse your voice note.</b> Please speak clearly and try again.")
             return Response({"status": "ok"})
             
         try:
-            due_date = None
-            due_date_str = ai_data.get("dueDate")
-            if due_date_str:
-                due_date = datetime.datetime.fromisoformat(due_date_str.replace("Z", "+00:00"))
-                
-            task = Task.objects.create(
-                user=profile.user,
-                title=ai_data.get("title"),
-                locationQuery=ai_data.get("locationQuery"),
-                required_context=ai_data.get("requiredContext"),
-                context_condition=ai_data.get("contextCondition"),
-                due_date=due_date
-            )
+            created_titles = []
+            for ai_data in ai_data_list:
+                due_date = None
+                due_date_str = ai_data.get("dueDate")
+                if due_date_str:
+                    due_date = datetime.datetime.fromisoformat(due_date_str.replace("Z", "+00:00"))
+                    
+                task = Task.objects.create(
+                    user=profile.user,
+                    title=ai_data.get("title") or "Voice Task",
+                    locationQuery=ai_data.get("locationQuery"),
+                    required_context=ai_data.get("requiredContext"),
+                    context_condition=ai_data.get("contextCondition"),
+                    due_date=due_date
+                )
+                created_titles.append(task.title)
             
-            loc_info = f"📍 {task.locationQuery}" if task.locationQuery else ""
-            due_info = f"⏰ {task.due_date.strftime('%d/%m/%y %H:%M')}" if task.due_date else ""
-            ctx_info = f"({task.required_context})" if task.required_context else ""
-            
-            send_telegram_message(chat_id, f"✅ <b>Task created via Voice!</b>\n\n📝 <b>{task.title}</b> {ctx_info}\n{due_info} {loc_info}")
+            send_telegram_message(chat_id, f"✅ <b>{len(created_titles)} Task(s) created via Voice!</b>\n\n" + "\n".join([f"• <b>{title}</b>" for title in created_titles]))
         except Exception as err:
             print("Telegram voice task creation error:", str(err))
             send_telegram_message(chat_id, "❌ <b>Error creating task from voice note.</b>")
@@ -1995,34 +2132,34 @@ def whatsapp_webhook(request):
         send_whatsapp_message(sender_number, "🎙️ *Processing voice message with AI...*")
         try:
             audio_bytes = base64.b64decode(media["data"])
-            ai_data = parse_voice_message_with_ai(audio_bytes, mime_type=media.get("mimetype", "audio/ogg"), user=profile.user)
+            ai_data_list = parse_voice_message_with_ai(audio_bytes, mime_type=media.get("mimetype", "audio/ogg"), user=profile.user)
             
-            if not ai_data or not ai_data.get("title"):
+            if not ai_data_list:
                 send_whatsapp_message(sender_number, "❌ *AI failed to parse your voice note.* Please speak clearly and try again.")
                 return Response({"status": "ok"})
                 
-            due_date = None
-            due_date_str = ai_data.get("dueDate")
-            if due_date_str:
-                due_date = datetime.datetime.fromisoformat(due_date_str.replace("Z", "+00:00"))
-                
-            task = Task.objects.create(
-                user=profile.user,
-                title=ai_data.get("title"),
-                locationQuery=ai_data.get("locationQuery"),
-                required_context=ai_data.get("requiredContext"),
-                context_condition=ai_data.get("contextCondition"),
-                due_date=due_date
-            )
-            
-            loc_info = f"📍 {task.locationQuery}" if task.locationQuery else ""
-            due_info = f"⏰ {task.due_date.strftime('%d/%m/%y %H:%M')}" if task.due_date else ""
-            ctx_info = f"({task.required_context})" if task.required_context else ""
-            
-            send_whatsapp_message(sender_number, f"✅ *Task created via Voice!*\n\n📝 *{task.title}* {ctx_info}\n{due_info} {loc_info}")
-        except Exception as err:
-            print("WhatsApp voice task creation error:", str(err))
-            send_whatsapp_message(sender_number, "❌ *Error creating task from voice note.*")
+            try:
+                created_titles = []
+                for ai_data in ai_data_list:
+                    due_date = None
+                    due_date_str = ai_data.get("dueDate")
+                    if due_date_str:
+                        due_date = datetime.datetime.fromisoformat(due_date_str.replace("Z", "+00:00"))
+                        
+                    task = Task.objects.create(
+                        user=profile.user,
+                        title=ai_data.get("title") or "Voice Task",
+                        locationQuery=ai_data.get("locationQuery"),
+                        required_context=ai_data.get("requiredContext"),
+                        context_condition=ai_data.get("contextCondition"),
+                        due_date=due_date
+                    )
+                    created_titles.append(task.title)
+                    
+                send_whatsapp_message(sender_number, f"✅ *{len(created_titles)} Task(s) created via Voice!*\n\n" + "\n".join([f"• *{title}*" for title in created_titles]))
+            except Exception as err:
+                print("WhatsApp voice task creation error:", str(err))
+                send_whatsapp_message(sender_number, "❌ *Error creating task from voice note.*")
             
         return Response({"status": "ok"})
         
