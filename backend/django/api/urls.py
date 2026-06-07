@@ -18,6 +18,7 @@ urlpatterns = [
     path('tasks/<int:pk>/nearby-places/', views.nearby_places, name='task-nearby-places'),
     path('google-places/autocomplete/', views.google_places_autocomplete, name='google-places-autocomplete'),
     path('google-places/details/', views.google_place_details, name='google-place-details'),
+    path('google-places/nearby-suggestions/', views.nearby_suggestions, name='google-places-nearby-suggestions'),
     path('profile/settings/', views.profile_settings, name='profile-settings'),
     path('health/', views.health_check, name='health_api'),
     path('profile/telegram-link-code/', views.generate_telegram_link_code, name='telegram-link-code'),

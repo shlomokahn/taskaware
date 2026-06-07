@@ -1,12 +1,15 @@
-﻿import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import * as Location from 'expo-location';
 
-export default function ContextPromptModal({ visible, contextLabel, onSave, onSkip, API_BASE }) {
+export default function ContextPromptModal({ visible, contextLabel, contextKey, onSave, onSkip, API_BASE }) {
     const [value, setValue] = useState('');
     const [hours, setHours] = useState('');
     const [suggestions, setSuggestions] = useState([]);
     const [loadingSuggestions, setLoadingSuggestions] = useState(false);
     const [selectedPlace, setSelectedPlace] = useState(null);
+    const [nearbySuggestions, setNearbySuggestions] = useState([]);
+    const [loadingNearby, setLoadingNearby] = useState(false);
 
     useEffect(() => {
         if (visible) {
@@ -15,9 +18,66 @@ export default function ContextPromptModal({ visible, contextLabel, onSave, onSk
             setSuggestions([]);
             setSelectedPlace(null);
             setLoadingSuggestions(false);
+            setNearbySuggestions([]);
+            setLoadingNearby(false);
         }
     }, [visible]);
 
+    // Fetch nearby suggestions for location category keys (except work/home)
+    useEffect(() => {
+        if (!visible || !contextKey || !API_BASE) {
+            setNearbySuggestions([]);
+            return;
+        }
+
+        const personalKeys = ['work', 'home'];
+        if (personalKeys.includes(contextKey.toLowerCase())) {
+            setNearbySuggestions([]);
+            return;
+        }
+
+        const fetchNearby = async () => {
+            try {
+                setLoadingNearby(true);
+                let loc = null;
+                try {
+                    loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+                } catch (locErr) {
+                    console.log('Error getting position in modal:', locErr);
+                }
+
+                if (!loc) {
+                    loc = await Location.getLastKnownPositionAsync({});
+                }
+
+                if (loc && loc.coords) {
+                    const res = await fetch(`${API_BASE}/api/google-places/nearby-suggestions/`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            latitude: loc.coords.latitude,
+                            longitude: loc.coords.longitude,
+                            category: contextKey,
+                        }),
+                    });
+
+                    if (res.ok) {
+                        const data = await res.json();
+                        setNearbySuggestions(Array.isArray(data.suggestions) ? data.suggestions : []);
+                    }
+                }
+            } catch (err) {
+                console.error('Error fetching nearby suggestions:', err);
+                setNearbySuggestions([]);
+            } finally {
+                setLoadingNearby(false);
+            }
+        };
+
+        fetchNearby();
+    }, [visible, contextKey, API_BASE]);
+
+    // Autocomplete searching for address input
     useEffect(() => {
         const query = value.trim();
 
@@ -92,15 +152,48 @@ export default function ContextPromptModal({ visible, contextLabel, onSave, onSk
                         <Text style={styles.title}>Quick question</Text>
                         <Text style={styles.subtitle}>Where is your {contextLabel}?</Text>
 
+                        {loadingNearby && (
+                            <View style={styles.loadingNearbyRow}>
+                                <ActivityIndicator size="small" color="#2f855a" />
+                                <Text style={styles.loadingText}>Finding nearby {contextLabel}s...</Text>
+                            </View>
+                        )}
+
+                        {nearbySuggestions.length > 0 && (
+                            <View style={styles.nearbyContainer}>
+                                <Text style={styles.nearbyTitle}>Nearby options (tap to select):</Text>
+                                {nearbySuggestions.map((item, index) => (
+                                    <TouchableOpacity
+                                        key={item.place_id || index}
+                                        style={styles.nearbyItem}
+                                        onPress={() => {
+                                            const valueToSave = `${item.name}, ${item.formatted_address}`;
+                                            const placeObj = {
+                                                placeId: item.place_id,
+                                                value: item.formatted_address,
+                                                coords_lat: item.coords_lat,
+                                                coords_lng: item.coords_lng,
+                                                name: item.name,
+                                            };
+                                            onSave(valueToSave, hours, placeObj);
+                                        }}
+                                    >
+                                        <Text style={styles.nearbyItemName}>📍 {item.name}</Text>
+                                        <Text style={styles.nearbyItemAddress}>{item.formatted_address} ({item.distance_m}m away)</Text>
+                                    </TouchableOpacity>
+                                ))}
+                            </View>
+                        )}
+
                         <TextInput
                             style={styles.input}
-                            placeholder="Add address"
+                            placeholder="Or search another address"
                             value={value}
                             onChangeText={(text) => {
                                 setValue(text);
                                 setSelectedPlace(null);
                             }}
-                            autoFocus={true}
+                            autoFocus={nearbySuggestions.length === 0 && !loadingNearby}
                             placeholderTextColor="#9ca3af"
                         />
 
@@ -288,4 +381,40 @@ const styles = StyleSheet.create({
         fontWeight: '700',
         color: '#fff',
     },
+    nearbyContainer: {
+        marginBottom: 16,
+    },
+    nearbyTitle: {
+        fontSize: 13,
+        fontWeight: '700',
+        color: '#374151',
+        marginBottom: 8,
+        textTransform: 'uppercase',
+        letterSpacing: 0.5,
+    },
+    nearbyItem: {
+        backgroundColor: '#f3f4f6',
+        borderRadius: 12,
+        padding: 12,
+        marginBottom: 8,
+        borderWidth: 1,
+        borderColor: '#e5e7eb',
+    },
+    nearbyItemName: {
+        fontSize: 14,
+        fontWeight: '800',
+        color: '#1f2937',
+    },
+    nearbyItemAddress: {
+        fontSize: 12,
+        color: '#6b7280',
+        marginTop: 2,
+    },
+    loadingNearbyRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        marginBottom: 16,
+    },
 });
+

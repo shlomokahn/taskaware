@@ -345,12 +345,16 @@ def evaluate_conditional_notifications(user, user_lat, user_lng):
             visit.last_visited_at = timezone.now()
             visit.save()
 
-    # Get active, unmuted tasks with required context
+    # Get active, unmuted tasks with either a required context OR a location query
+    from django.db.models import Q
     pending_tasks = Task.objects.filter(
         user=user,
         is_completed=False,
         is_muted=False
-    ).exclude(required_context__isnull=True).exclude(required_context='')
+    ).filter(
+        Q(required_context__isnull=False) & ~Q(required_context='') |
+        Q(locationQuery__isnull=False) & ~Q(locationQuery='')
+    )
 
     satisfied_tasks = []
     for task in pending_tasks:
@@ -358,39 +362,43 @@ def evaluate_conditional_notifications(user, user_lat, user_lng):
         condition = task.context_condition
         
         # Check if context is muted in user preferences
-        if profile.muted_contexts and context_key in profile.muted_contexts:
-            continue
-        
-        user_context = UserContext.objects.filter(user=user, key=context_key).first()
-        if not user_context or not user_context.coords_lat:
+        if context_key and profile.muted_contexts and context_key in profile.muted_contexts:
             continue
             
-        context_lat = float(user_context.coords_lat)
-        context_lng = float(user_context.coords_lng)
-        
-        dist_to_context = haversine_distance_m(user_lat, user_lng, context_lat, context_lng)
-        is_currently_at_context = (dist_to_context < 200)
-        
         context_condition_met = False
         
-        if condition == 'during':
-            context_condition_met = is_currently_at_context
-        elif condition == 'after':
-            is_outside = (dist_to_context > 300)
-            visited_today = check_if_user_visited_today(user, context_key)
-            
-            hours_condition_met = True
-            if user_context.metadata and 'hours' in user_context.metadata:
-                hours_condition_met = is_time_after_range(user_context.metadata['hours'])
+        if context_key:
+            user_context = UserContext.objects.filter(user=user, key=context_key).first()
+            if not user_context or not user_context.coords_lat:
+                continue
                 
-            context_condition_met = is_outside and visited_today and hours_condition_met
-        elif condition == 'before':
-            is_outside = (dist_to_context > 300)
-            hours_condition_met = True
-            if user_context.metadata and 'hours' in user_context.metadata:
-                hours_condition_met = is_time_before_range(user_context.metadata['hours'])
-            context_condition_met = is_outside and hours_condition_met
+            context_lat = float(user_context.coords_lat)
+            context_lng = float(user_context.coords_lng)
+            
+            dist_to_context = haversine_distance_m(user_lat, user_lng, context_lat, context_lng)
+            is_currently_at_context = (dist_to_context < 200)
+            
+            if condition == 'during':
+                context_condition_met = is_currently_at_context
+            elif condition == 'after':
+                is_outside = (dist_to_context > 300)
+                visited_today = check_if_user_visited_today(user, context_key)
+                
+                hours_condition_met = True
+                if user_context.metadata and 'hours' in user_context.metadata:
+                    hours_condition_met = is_time_after_range(user_context.metadata['hours'])
+                    
+                context_condition_met = is_outside and visited_today and hours_condition_met
+            elif condition == 'before':
+                is_outside = (dist_to_context > 300)
+                hours_condition_met = True
+                if user_context.metadata and 'hours' in user_context.metadata:
+                    hours_condition_met = is_time_before_range(user_context.metadata['hours'])
+                context_condition_met = is_outside and hours_condition_met
+            else:
+                context_condition_met = True
         else:
+            # No anchor context, so the condition is always met (we just care about proximity to locationQuery)
             context_condition_met = True
 
         if context_condition_met and task.locationQuery:
@@ -420,45 +428,76 @@ def evaluate_conditional_notifications(user, user_lat, user_lng):
         if not notify_list:
             continue
 
-        # Use the location query of the first task (preserves original casing for Places Search)
-        original_query = notify_list[0].locationQuery
-        
-        # API Cost Optimization: Cache results rounded to 3 decimal places (~100m)
-        rounded_lat = round(user_lat, 3)
-        rounded_lng = round(user_lng, 3)
-        radius_m = profile.notification_radius or 300
-        
-        search_result = None
-        try:
-            from django.core.cache import cache
-            cache_key = f"places:{rounded_lat}:{rounded_lng}:{query_key}:{radius_m}"
-            search_result = cache.get(cache_key)
-            if not search_result:
-                search_result = google_places_search(original_query, user_lat, user_lng, radius_m=radius_m)
-                cache.set(cache_key, search_result, 3600)
-        except Exception as cache_err:
-            print("Cache/Places error in evaluation:", str(cache_err))
-            try:
-                search_result = google_places_search(original_query, user_lat, user_lng, radius_m=radius_m)
-            except Exception:
-                search_result = None
+        # Check if the user has a saved context preference for this query_key
+        user_context_pref = UserContext.objects.filter(
+            user=user, 
+            key=query_key, 
+            coords_lat__isnull=False, 
+            coords_lng__isnull=False
+        ).first()
 
-        if search_result and search_result.get("places"):
-            nearest_place = search_result["places"][0]
+        nearest_place = None
+        if user_context_pref:
+            pref_lat = float(user_context_pref.coords_lat)
+            pref_lng = float(user_context_pref.coords_lng)
+            dist_to_pref = haversine_distance_m(user_lat, user_lng, pref_lat, pref_lng)
+            radius_m = profile.notification_radius or 300
+            
+            if dist_to_pref <= radius_m:
+                val_parts = user_context_pref.value.split(',', 1)
+                name = val_parts[0].strip()
+                address = val_parts[1].strip() if len(val_parts) > 1 else user_context_pref.value
+                nearest_place = {
+                    "name": name,
+                    "address": address,
+                    "lat": pref_lat,
+                    "lng": pref_lng,
+                    "distance_m": round(dist_to_pref)
+                }
+        else:
+            # Fallback to dynamic Google Places search around their current location
+            original_query = notify_list[0].locationQuery
+            radius_m = profile.notification_radius or 300
+            rounded_lat = round(user_lat, 3)
+            rounded_lng = round(user_lng, 3)
+            
+            search_result = None
+            try:
+                from django.core.cache import cache
+                cache_key = f"places:{rounded_lat}:{rounded_lng}:{query_key}:{radius_m}"
+                search_result = cache.get(cache_key)
+                if not search_result:
+                    search_result = google_places_search(original_query, user_lat, user_lng, radius_m=radius_m)
+                    cache.set(cache_key, search_result, 3600)
+            except Exception as cache_err:
+                print("Cache/Places error in evaluation:", str(cache_err))
+                try:
+                    search_result = google_places_search(original_query, user_lat, user_lng, radius_m=radius_m)
+                except Exception:
+                    search_result = None
+            
+            if search_result and search_result.get("places"):
+                nearest_place = search_result["places"][0]
+
+        if nearest_place:
             alert_sent = False
             
             if profile.expo_push_token:
                 if len(notify_list) == 1:
                     # Single task notification
                     task = notify_list[0]
-                    context_label = dict(UserContext.ContextKey.choices).get(task.required_context, task.required_context)
-                    context_name = context_label.lower() if context_label else "location"
-                    
-                    body_message = f"Since you finished at {context_name}, there is a {nearest_place['name']} nearby ({nearest_place['address']}). Don't forget: '{task.title}'"
-                    if task.context_condition == 'during':
-                        body_message = f"While you are at {context_name}, there is a {nearest_place['name']} nearby. Don't forget: '{task.title}'"
-                    elif task.context_condition == 'before':
-                        body_message = f"Before you start at {context_name}, there is a {nearest_place['name']} nearby. Don't forget: '{task.title}'"
+                    if task.required_context:
+                        context_label = dict(UserContext.ContextKey.choices).get(task.required_context, task.required_context)
+                        context_name = context_label.lower() if context_label else "location"
+                        
+                        body_message = f"Since you finished at {context_name}, there is a {nearest_place['name']} nearby ({nearest_place['address']}). Don't forget: '{task.title}'"
+                        if task.context_condition == 'during':
+                            body_message = f"While you are at {context_name}, there is a {nearest_place['name']} nearby. Don't forget: '{task.title}'"
+                        elif task.context_condition == 'before':
+                            body_message = f"Before you start at {context_name}, there is a {nearest_place['name']} nearby. Don't forget: '{task.title}'"
+                    else:
+                        # No anchor context (straight location proximity)
+                        body_message = f"You are near {nearest_place['name']} ({nearest_place['address']}). Don't forget: '{task.title}'"
                     
                     title_message = "📍 Task location nearby!"
                 else:
@@ -474,11 +513,6 @@ def evaluate_conditional_notifications(user, user_lat, user_lng):
                 )
                 alert_sent = True
                 
-            # Telegram and WhatsApp alerts for nearby location are disabled per user request
-            # if profile.telegram_chat_id:
-            #     if len(notify_list) == 1:
-            #         task = notify_list[0]
-            #         context_label = dict(UserContext.ContextKey.choices).get(task.required_context, task.required_context)
             #         context_name = context_label.lower() if context_label else "location"
             #         
             #         tg_text = f"📍 <b>Task location nearby!</b>\n\n"
@@ -726,6 +760,22 @@ def infer_context_keys(text):
 def infer_context(request):
     title = request.data.get('title', '')
     inferred_keys = infer_context_keys(title)
+    
+    # Also find locationQuery from task or infer it
+    location_query = None
+    # 1. Try to find recently created task with this title
+    recent_task = Task.objects.filter(user=request.user, title=title).order_by('-created_at').first()
+    if recent_task and recent_task.locationQuery:
+        location_query = recent_task.locationQuery
+    else:
+        location_query = infer_task_place_query(title)
+        
+    # If a locationQuery was found, add it to inferred keys
+    if location_query:
+        category_key, config = resolve_google_place_config(location_query)
+        target_key = category_key if category_key else location_query.lower().strip()
+        inferred_keys.add(target_key)
+        
     if not inferred_keys:
         return Response({"pending_contexts": [], "matched_contexts": []})
 
@@ -737,11 +787,21 @@ def infer_context(request):
     pending = [key for key in inferred_keys if key not in existing]
     matched = [key for key in inferred_keys if key in existing]
 
-    label_map = {choice.value: choice.label for choice in UserContext.ContextKey}
+    # Helper to get label
+    def get_label(key):
+        # 1. Check ContextKey choices
+        for val, label in UserContext.ContextKey.choices:
+            if val == key:
+                return label
+        # 2. Check GOOGLE_PLACE_CATALOG
+        if key in GOOGLE_PLACE_CATALOG:
+            return GOOGLE_PLACE_CATALOG[key]["label"]
+        # 3. Fallback: format key nicely
+        return key.replace('_', ' ').title()
 
     return Response({
-        "pending_contexts": [{"key": key, "label": label_map.get(key, key)} for key in pending],
-        "matched_contexts": [{"key": key, "label": label_map.get(key, key)} for key in matched],
+        "pending_contexts": [{"key": key, "label": get_label(key)} for key in pending],
+        "matched_contexts": [{"key": key, "label": get_label(key)} for key in matched],
     })
 
 
@@ -1821,6 +1881,47 @@ def whatsapp_webhook(request):
             Task.objects.create(user=profile.user, title=text)
             
     return Response({"status": "ok"})
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def nearby_suggestions(request):
+    user_lat = request.data.get('latitude') or request.data.get('lat')
+    user_lng = request.data.get('longitude') or request.data.get('lng')
+    category = request.data.get('category', '').strip()
+
+    if user_lat is None or user_lng is None or not category:
+        return Response({'error': 'Missing latitude, longitude or category'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        user_lat = float(user_lat)
+        user_lng = float(user_lng)
+    except ValueError:
+        return Response({'error': 'Invalid coordinates'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        search_result = None
+        for radius_m in (1200, 2500, 5000):
+            search_result = google_places_search(category, user_lat, user_lng, radius_m)
+            if search_result and search_result.get("places"):
+                break
+        
+        places = search_result["places"] if search_result else []
+        suggestions = []
+        for p in places[:3]:
+            suggestions.append({
+                "name": p["name"],
+                "formatted_address": p["address"],
+                "coords_lat": p["lat"],
+                "coords_lng": p["lng"],
+                "distance_m": p["distance_m"],
+                "place_id": p.get("place_id"),
+            })
+        
+        return Response({"suggestions": suggestions})
+    except Exception as e:
+        print("Error in nearby_suggestions:", str(e))
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @api_view(['GET'])

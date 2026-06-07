@@ -606,6 +606,7 @@ function AppContent() {
             <ContextPromptModal
                 visible={!!activeContext}
                 contextLabel={activeContext?.label || activeContext?.key}
+                contextKey={activeContext?.key}
                 API_BASE={API_BASE}
                 onSave={async (value, hours, place) => {
                     if (!activeContext) return;

@@ -9,7 +9,7 @@ class UserContext(models.Model):
         GYM = 'gym', 'Gym'
 
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='contexts')
-    key = models.CharField(max_length=40, choices=ContextKey.choices)
+    key = models.CharField(max_length=40)
     value = models.CharField(max_length=255)
     coords_lat = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     coords_lng = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
@@ -39,7 +39,6 @@ class Task(models.Model):
     locationQuery = models.CharField(max_length=255, null=True, blank=True)
     required_context = models.CharField(
         max_length=40,
-        choices=UserContext.ContextKey.choices,
         null=True,
         blank=True
     )
@@ -88,7 +87,7 @@ from django.utils import timezone
 
 class UserContextVisit(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='context_visits')
-    context_key = models.CharField(max_length=40, choices=UserContext.ContextKey.choices)
+    context_key = models.CharField(max_length=40)
     date = models.DateField(default=timezone.now)
     was_visited = models.BooleanField(default=False)
     last_visited_at = models.DateTimeField(null=True, blank=True)
