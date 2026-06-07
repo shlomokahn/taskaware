@@ -3,7 +3,7 @@ import { Alert, View, Text, TouchableOpacity, Modal, StyleSheet, ActivityIndicat
 import * as Updates from 'expo-updates';
 import * as Application from 'expo-application';
 
-const JS_VERSION = '1.1.0';
+const JS_VERSION = '1.1.0.1';
 
 export default function UpdateChecker({ API_BASE }) {
     const [updateAvailable, setUpdateAvailable] = useState(false);
@@ -42,7 +42,7 @@ export default function UpdateChecker({ API_BASE }) {
                 if (data.is_mandatory) {
                     Alert.alert(
                         'Required Update',
-                        `Version ${data.version} is now available. You must update to continue using the app.`,
+                        `Version ${data.version === '1.1.0.1' ? '1.1.0' : data.version} is now available. You must update to continue using the app.`,
                         [
                             {
                                 text: 'Update Now',
@@ -108,7 +108,7 @@ export default function UpdateChecker({ API_BASE }) {
                             <Text style={styles.modalTitle}>?? New Update Available</Text>
 
                             <Text style={styles.versionText}>
-                                Version {updateInfo.version}
+                                Version {updateInfo.version === '1.1.0.1' ? '1.1.0' : updateInfo.version}
                             </Text>
 
                             <Text style={styles.notesTitle}>What's New:</Text>
