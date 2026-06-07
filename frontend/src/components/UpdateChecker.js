@@ -82,7 +82,7 @@ export default function UpdateChecker({ API_BASE }) {
             }
         } catch (error) {
             console.error('Error fetching update:', error);
-            Alert.alert('Update Error', 'Failed to download update. Please try again later.');
+            Alert.alert('Update Error', `Failed to download update: ${error.message || error}`);
         } finally {
             setIsDownloading(false);
         }

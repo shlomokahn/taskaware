@@ -81,10 +81,7 @@
       "policy": "appVersion"
     },
     "updates": {
-      "url": "https://u.expo.dev/24e2be65-d267-48fc-a4a1-0b4fbbe694d6",
-      "requestHeaders": {
-        "accept": "application/json"
-      }
+      "url": "https://u.expo.dev/24e2be65-d267-48fc-a4a1-0b4fbbe694d6"
     }
   }
 }
