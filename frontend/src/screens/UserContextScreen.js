@@ -1,4 +1,4 @@
-﻿import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, RefreshControl, Modal, TextInput, ScrollView } from 'react-native';
 
 const EditContextModal = ({ visible, context, onClose, onSave, API_BASE }) => {
@@ -88,7 +88,7 @@ const EditContextModal = ({ visible, context, onClose, onSave, API_BASE }) => {
         <Modal transparent visible={visible} animationType="fade" onRequestClose={onClose}>
             <View style={styles.modalOverlay}>
                 <View style={styles.modalContent}>
-                    <Text style={styles.modalTitle}>Edit Location</Text>
+                    <Text style={styles.modalTitle}>Configure {context?.label || 'Location'}</Text>
                     <Text style={styles.modalSubtitle}>Choose a precise place from Google Places.</Text>
 
                     <TextInput
@@ -162,6 +162,26 @@ const EditContextModal = ({ visible, context, onClose, onSave, API_BASE }) => {
     );
 };
 
+const STANDARD_KEYS = [
+    { key: 'home', label: 'Home', icon: '🏠' },
+    { key: 'work', label: 'Work', icon: '💼' },
+    { key: 'school', label: 'School', icon: '🏫' },
+    { key: 'gym', label: 'Gym', icon: '💪' },
+    { key: 'bank', label: 'Bank', icon: '🏦' },
+    { key: 'supermarket', label: 'Supermarket', icon: '🛒' },
+    { key: 'pharmacy', label: 'Pharmacy', icon: '💊' },
+    { key: 'post_office', label: 'Post Office', icon: '📦' },
+    { key: 'atm', label: 'ATM', icon: '🏧' },
+    { key: 'cafe', label: 'Cafe', icon: '☕' },
+    { key: 'restaurant', label: 'Restaurant', icon: '🍔' },
+    { key: 'bakery', label: 'Bakery', icon: '🥐' },
+    { key: 'hardware_store', label: 'Hardware Store', icon: '🛠️' },
+    { key: 'electronics_store', label: 'Electronics Store', icon: '💻' },
+    { key: 'library', label: 'Library', icon: '📚' },
+    { key: 'print_shop', label: 'Print Shop', icon: '🖨️' },
+    { key: 'park', label: 'Park', icon: '🌳' },
+];
+
 export default function UserContextScreen({ token, API_BASE, onClose }) {
     const [contexts, setContexts] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -196,7 +216,7 @@ export default function UserContextScreen({ token, API_BASE, onClose }) {
     const deleteContext = async (contextId) => {
         Alert.alert(
             'Delete Location',
-            'Are you sure you want to delete this location?',
+            'Are you sure you want to delete this location settings?',
             [
                 { text: 'Cancel', style: 'cancel' },
                 {
@@ -221,21 +241,47 @@ export default function UserContextScreen({ token, API_BASE, onClose }) {
         );
     };
 
-    const getContextLabel = (key) => {
-        const labels = {
-            'work': 'Work',
-            'home': 'Home',
-            'school': 'School',
-            'gym': 'Gym'
-        };
-        return labels[key] || key;
-    };
-
     const formatDate = (dateString) => {
         if (!dateString) return '';
         const d = new Date(dateString);
         return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
     };
+
+    const mergedLocations = useMemo(() => {
+        const contextMap = {};
+        contexts.forEach(c => {
+            contextMap[c.key] = c;
+        });
+
+        const list = [];
+        STANDARD_KEYS.forEach(item => {
+            const saved = contextMap[item.key];
+            list.push({
+                key: item.key,
+                label: item.label,
+                icon: item.icon,
+                savedContext: saved || null,
+            });
+        });
+
+        const standardKeySet = new Set(STANDARD_KEYS.map(item => item.key));
+        contexts.forEach(c => {
+            if (!standardKeySet.has(c.key)) {
+                const label = c.key.split('_')
+                    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+                    .join(' ');
+                list.push({
+                    key: c.key,
+                    label: label,
+                    icon: '📍',
+                    savedContext: c,
+                    isCustom: true,
+                });
+            }
+        });
+
+        return list;
+    }, [contexts]);
 
     if (loading) {
         return (
@@ -255,64 +301,82 @@ export default function UserContextScreen({ token, API_BASE, onClose }) {
                 <View style={{ width: 60 }} />
             </View>
 
-            {contexts.length === 0 ? (
-                <View style={styles.emptyState}>
-                    <Text style={styles.emptyIcon}>📭</Text>
-                    <Text style={styles.emptyText}>No locations saved yet</Text>
-                    <Text style={styles.emptySubText}>Locations will be added when you create tasks</Text>
-                </View>
-            ) : (
-                <FlatList
-                    data={contexts}
-                    keyExtractor={(item) => item.id?.toString()}
-                    contentContainerStyle={styles.listContent}
-                    refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchContexts(); }} />}
-                    renderItem={({ item }) => (
-                        <View style={styles.contextCard}>
-                            <View style={styles.cardHeader}>
-                                <View style={styles.cardTitle}>
-                                    <Text style={styles.contextKey}>{getContextLabel(item.key)}</Text>
-                                    <Text style={styles.contextValue}>{item.value}</Text>
+            <FlatList
+                data={mergedLocations}
+                keyExtractor={(item) => item.key}
+                contentContainerStyle={styles.listContent}
+                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchContexts(); }} />}
+                renderItem={({ item }) => {
+                    const hasSaved = !!item.savedContext;
+                    const savedVal = item.savedContext?.value;
+                    const hours = item.savedContext?.metadata?.hours;
+                    const lastUpdated = item.savedContext?.last_updated;
+                    const lat = item.savedContext?.coords_lat;
+                    const lng = item.savedContext?.coords_lng;
+
+                    return (
+                        <View style={[styles.contextCard, !hasSaved && styles.contextCardUnsaved]}>
+                            <View style={[styles.cardHeader, hasSaved && { marginBottom: 10 }]}>
+                                <View style={styles.cardLeft}>
+                                    <Text style={styles.iconBox}>{item.icon}</Text>
+                                    <View style={styles.cardTitle}>
+                                        <Text style={styles.contextKey}>{item.label}</Text>
+                                        {hasSaved ? (
+                                            <Text style={styles.contextValue}>{savedVal}</Text>
+                                        ) : (
+                                            <Text style={styles.contextValueUnsaved}>Not configured yet</Text>
+                                        )}
+                                    </View>
                                 </View>
                                 <View style={styles.cardActions}>
-                                    <TouchableOpacity
-                                        style={styles.editBtn}
-                                        activeOpacity={0.7}
-                                        onPress={() => setEditingContext(item)}
-                                    >
-                                        <Text style={styles.editBtnText}>✏️</Text>
-                                    </TouchableOpacity>
-                                    <TouchableOpacity
-                                        style={[styles.editBtn, styles.deleteBtnStyle]}
-                                        activeOpacity={0.7}
-                                        onPress={() => deleteContext(item.id)}
-                                    >
-                                        <Text style={styles.deleteBtnText}>🗑️</Text>
-                                    </TouchableOpacity>
+                                    {hasSaved ? (
+                                        <>
+                                            <TouchableOpacity
+                                                style={styles.editBtn}
+                                                activeOpacity={0.7}
+                                                onPress={() => setEditingContext({ ...item.savedContext, label: item.label })}
+                                            >
+                                                <Text style={styles.editBtnText}>✏️</Text>
+                                            </TouchableOpacity>
+                                            <TouchableOpacity
+                                                style={[styles.editBtn, styles.deleteBtnStyle]}
+                                                activeOpacity={0.7}
+                                                onPress={() => deleteContext(item.savedContext.id)}
+                                            >
+                                                <Text style={styles.deleteBtnText}>🗑️</Text>
+                                            </TouchableOpacity>
+                                        </>
+                                    ) : (
+                                        <TouchableOpacity
+                                            style={[styles.editBtn, styles.addBtnStyle]}
+                                            activeOpacity={0.7}
+                                            onPress={() => setEditingContext({ key: item.key, label: item.label, value: '', metadata: {} })}
+                                        >
+                                            <Text style={styles.addBtnText}>➕</Text>
+                                        </TouchableOpacity>
+                                    )}
                                 </View>
                             </View>
 
-                            {item.metadata && Object.keys(item.metadata).length > 0 && (
+                            {hasSaved && hours && (
                                 <View style={styles.metadata}>
-                                    {item.metadata.hours && (
-                                        <>
-                                            <Text style={styles.metadataLabel}>⏰ Hours:</Text>
-                                            <Text style={styles.metadataValue}>{item.metadata.hours}</Text>
-                                        </>
-                                    )}
+                                    <Text style={styles.metadataLabel}>⏰ Hours:</Text>
+                                    <Text style={styles.metadataValue}>{hours}</Text>
                                 </View>
                             )}
 
-                            <View style={styles.footer}>
-                                <Text style={styles.footerText}>Updated: {formatDate(item.last_updated)}</Text>
-                                {item.coords_lat && item.coords_lng && (
-                                    <Text style={styles.coordsText}>📌 {parseFloat(item.coords_lat).toFixed(4)}, {parseFloat(item.coords_lng).toFixed(4)}</Text>
-                                )}
-                            </View>
+                            {hasSaved && (
+                                <View style={styles.footer}>
+                                    <Text style={styles.footerText}>Updated: {formatDate(lastUpdated)}</Text>
+                                    {lat && lng && (
+                                        <Text style={styles.coordsText}>📌 {parseFloat(lat).toFixed(4)}, {parseFloat(lng).toFixed(4)}</Text>
+                                    )}
+                                </View>
+                            )}
                         </View>
-                    )}
-                />
-            )}
+                    );
+                }}
+            />
 
             {editingContext && (
                 <EditContextModal
@@ -322,27 +386,46 @@ export default function UserContextScreen({ token, API_BASE, onClose }) {
                     onClose={() => setEditingContext(null)}
                     onSave={async (value, hours, selectedPlace) => {
                         try {
+                            const isNew = !editingContext.id;
+                            const url = isNew 
+                                ? `${API_BASE}/api/user-context/` 
+                                : `${API_BASE}/api/user-context/${editingContext.id}/`;
+                            const method = isNew ? 'POST' : 'PATCH';
+                            
                             const hasCoords = selectedPlace?.coords_lat != null && selectedPlace?.coords_lng != null;
-                            const res = await fetch(`${API_BASE}/api/user-context/${editingContext.id}/`, {
-                                method: 'PATCH',
+                            const payload = {
+                                key: editingContext.key,
+                                value,
+                                coords_lat: hasCoords ? selectedPlace.coords_lat : editingContext.coords_lat || null,
+                                coords_lng: hasCoords ? selectedPlace.coords_lng : editingContext.coords_lng || null,
+                                metadata: hours ? { hours } : {},
+                                source: hasCoords ? 'google_places' : editingContext.source || 'user',
+                                confidence: 1.0,
+                            };
+
+                            const res = await fetch(url, {
+                                method: method,
                                 headers: { 'Content-Type': 'application/json', 'Authorization': `Token ${token}` },
-                                body: JSON.stringify({
-                                    value,
-                                    coords_lat: hasCoords ? selectedPlace.coords_lat : editingContext.coords_lat,
-                                    coords_lng: hasCoords ? selectedPlace.coords_lng : editingContext.coords_lng,
-                                    metadata: hours ? { hours } : {},
-                                    source: hasCoords ? 'google_places' : editingContext.source || 'user',
-                                    confidence: 1.0,
-                                })
+                                body: JSON.stringify(payload)
                             });
+
                             if (res.ok) {
-                                const updated = await res.json();
-                                setContexts(prev => prev.map(c => c.id === updated.id ? updated : c));
+                                const savedData = await res.json();
+                                if (isNew) {
+                                    setContexts(prev => [...prev, savedData]);
+                                } else {
+                                    setContexts(prev => prev.map(c => c.id === savedData.id ? savedData : c));
+                                }
                                 setEditingContext(null);
-                                Alert.alert('Success', 'Location updated');
+                                Alert.alert('Success', isNew ? 'Location saved' : 'Location updated');
+                            } else {
+                                const errorText = await res.text();
+                                console.error('Save location failed:', errorText);
+                                Alert.alert('Error', 'Failed to save location settings');
                             }
                         } catch (error) {
-                            Alert.alert('Error', 'Failed to update location');
+                            console.error('Save location error:', error);
+                            Alert.alert('Error', 'Failed to save location');
                         }
                     }}
                 />
@@ -380,11 +463,42 @@ const styles = StyleSheet.create({
         shadowRadius: 4,
         elevation: 2,
     },
+    contextCardUnsaved: {
+        backgroundColor: '#f9fafb',
+        borderStyle: 'dashed',
+        borderColor: '#d1d5db',
+        shadowOpacity: 0,
+        elevation: 0,
+    },
     cardHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
-        alignItems: 'flex-start',
-        marginBottom: 10,
+        alignItems: 'center',
+    },
+    cardLeft: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+        flex: 1,
+    },
+    iconBox: {
+        fontSize: 24,
+        marginRight: 4,
+    },
+    contextValueUnsaved: {
+        fontSize: 14,
+        color: '#9ca3af',
+        fontStyle: 'italic',
+        fontWeight: '500',
+    },
+    addBtnStyle: {
+        backgroundColor: '#f0fdf4',
+        borderColor: '#bbf7d0',
+    },
+    addBtnText: {
+        fontSize: 16,
+        color: '#16a34a',
+        fontWeight: 'bold',
     },
     cardTitle: { flex: 1 },
     contextKey: { fontSize: 16, fontWeight: '800', color: '#111827', marginBottom: 4 },
