@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     Modal,
     View,
@@ -129,17 +129,17 @@ export default function EditTask({ visible, task, onClose, onSave }) {
                                 style={styles.iosDoneBtn}
                                 onPress={() => setShowIOSPicker(false)}
                             >
-                                <Text style={styles.iosDoneBtnText}>סיום</Text>
+                                <Text style={styles.iosDoneBtnText}>Done</Text>
                             </TouchableOpacity>
                         </View>
                     )}
 
                     <View style={styles.buttonRow}>
+                        <TouchableOpacity style={[styles.btn, styles.cancelBtn]} onPress={onClose}>
+                            <Text style={styles.cancelBtnText}>Cancel</Text>
+                        </TouchableOpacity>
                         <TouchableOpacity style={[styles.btn, styles.saveBtn]} onPress={handleSave}>
                             <Text style={styles.saveBtnText}>Save changes</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity style={[styles.btn, styles.cancelBtn]} onPress={onClose}>
-                            <Text style={styles.cancelBtnText}>cancellation</Text>
                         </TouchableOpacity>
                     </View>
                 </View>
@@ -169,14 +169,14 @@ const styles = StyleSheet.create({
         fontSize: 22,
         fontWeight: '800',
         color: '#1f2937',
-        textAlign: 'right',
+        textAlign: 'left',
         marginBottom: 20,
     },
     label: {
         fontSize: 13,
         fontWeight: '700',
         color: '#6B7280',
-        textAlign: 'right',
+        textAlign: 'left',
         marginBottom: 6,
     },
     input: {
@@ -186,13 +186,13 @@ const styles = StyleSheet.create({
         paddingHorizontal: 15,
         borderWidth: 1,
         borderColor: '#e5e7eb',
-        textAlign: 'right',
+        textAlign: 'left',
         fontSize: 16,
         marginBottom: 18,
         color: '#111827',
     },
     dateTile: {
-        flexDirection: 'row-reverse',
+        flexDirection: 'row',
         alignItems: 'center',
         backgroundColor: '#f9fafb',
         borderRadius: 12,
@@ -209,7 +209,7 @@ const styles = StyleSheet.create({
         fontSize: 15,
         fontWeight: '600',
         color: '#111827',
-        textAlign: 'right',
+        textAlign: 'left',
     },
     dateTileChevron: {
         fontSize: 20,
@@ -253,7 +253,7 @@ const styles = StyleSheet.create({
         fontSize: 15,
     },
     buttonRow: {
-        flexDirection: 'row-reverse',
+        flexDirection: 'row',
         gap: 12,
     },
     btn: {

@@ -10,7 +10,16 @@ import {
     TextInput,
     TouchableOpacity,
     View,
+    I18nManager,
 } from 'react-native';
+
+// Force Left-to-Right (LTR) layout direction globally
+try {
+    I18nManager.allowRTL(false);
+    I18nManager.forceRTL(false);
+} catch (e) {
+    console.warn('Error forcing LTR layout:', e);
+}
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Notifications from 'expo-notifications';

@@ -3,7 +3,7 @@ import { Alert, View, Text, TouchableOpacity, Modal, StyleSheet, ActivityIndicat
 import * as Updates from 'expo-updates';
 import * as Application from 'expo-application';
 
-const JS_VERSION = '1.0.9';
+const JS_VERSION = '1.1.0';
 
 export default function UpdateChecker({ API_BASE }) {
     const [updateAvailable, setUpdateAvailable] = useState(false);
