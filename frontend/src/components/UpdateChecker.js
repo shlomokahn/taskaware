@@ -68,23 +68,42 @@ export default function UpdateChecker({ API_BASE }) {
                     'OTA updates are simulated and not supported in development mode (Expo Go / Metro). Your local bundle already has the latest code changes!',
                     [{ text: 'OK', onPress: () => setShowUpdateModal(false) }]
                 );
+                setIsDownloading(false);
                 return;
             }
 
-            // Use Expo Updates to fetch and apply the update
+            console.log('Checking and fetching update...');
             const update = await Updates.checkForUpdateAsync();
 
             if (update.isAvailable) {
+                console.log('New update is available. Fetching...');
                 await Updates.fetchUpdateAsync();
-                // Reload the app with new update
+                console.log('Update fetched successfully. Reloading...');
                 await Updates.reloadAsync();
             } else {
-                Alert.alert('Up to date', 'You are running the latest version');
-                setShowUpdateModal(false);
+                console.log('checkForUpdateAsync says no update is available. Trying direct fetch/reload fallback...');
+                try {
+                    await Updates.fetchUpdateAsync();
+                    await Updates.reloadAsync();
+                } catch (fetchErr) {
+                    console.log('Direct fetch/reload failed:', fetchErr);
+                    try {
+                        await Updates.reloadAsync();
+                    } catch (reloadErr) {
+                        console.log('Direct reload failed:', reloadErr);
+                        Alert.alert('Up to date', 'You are running the latest version');
+                        setShowUpdateModal(false);
+                    }
+                }
             }
         } catch (error) {
             console.error('Error fetching update:', error);
-            Alert.alert('Update Error', `Failed to download update: ${error.message || error}`);
+            try {
+                console.log('Attempting reload fallback after error...');
+                await Updates.reloadAsync();
+            } catch (reloadErr) {
+                Alert.alert('Update Error', `Failed to download update: ${error.message || error}`);
+            }
         } finally {
             setIsDownloading(false);
         }
