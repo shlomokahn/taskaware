@@ -5,7 +5,6 @@ import {
     KeyboardAvoidingView,
     Modal,
     Platform,
-    SafeAreaView,
     StyleSheet,
     Text,
     TextInput,
@@ -13,6 +12,7 @@ import {
     View,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Notifications from 'expo-notifications';
 import * as TaskManager from 'expo-task-manager';
 import * as Location from 'expo-location';
@@ -79,7 +79,8 @@ Notifications.setNotificationHandler({
 
 const API_BASE = 'https://taskaware-backend.onrender.com';
 
-export default function App() {
+function AppContent() {
+    const insets = useSafeAreaInsets();
     const [tasks, setTasks] = useState([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
@@ -471,12 +472,14 @@ export default function App() {
     };
 
     return (
-        <SafeAreaView style={styles.container}>
+        <View style={[styles.container, { paddingTop: insets.top }]}>
             <UpdateChecker API_BASE={API_BASE} />
 
-            {activeTab === 'home' ? renderHomeScreen() : renderSettingsScreen()}
+            <View style={{ flex: 1 }}>
+                {activeTab === 'home' ? renderHomeScreen() : renderSettingsScreen()}
+            </View>
 
-            <View style={styles.bottomBar}>
+            <View style={[styles.bottomBar, { height: 60 + insets.bottom, paddingBottom: insets.bottom }]}>
                 <TouchableOpacity style={styles.tabItem} onPress={() => setActiveTab('home')}>
                     <Text style={[styles.tabIcon, activeTab === 'home' && styles.tabIconActive]}>🏠</Text>
                     <Text style={[styles.tabLabel, activeTab === 'home' && styles.tabLabelActive]}>Home</Text>
@@ -554,7 +557,15 @@ export default function App() {
                     advanceContextPrompt(nextQueue);
                 }}
             />
-        </SafeAreaView>
+        </View>
+    );
+}
+
+export default function App() {
+    return (
+        <SafeAreaProvider>
+            <AppContent />
+        </SafeAreaProvider>
     );
 }
 
@@ -562,15 +573,9 @@ const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#f3f4f6' },
     bottomBar: {
         flexDirection: 'row',
-        height: 80,
         backgroundColor: '#fff',
         borderTopWidth: 1,
         borderTopColor: '#e5e7eb',
-        paddingBottom: 20,
-        position: 'absolute',
-        bottom: 0,
-        left: 0,
-        right: 0,
         justifyContent: 'space-around',
         alignItems: 'center',
         elevation: 20,
