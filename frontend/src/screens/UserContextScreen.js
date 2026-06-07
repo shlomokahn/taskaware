@@ -421,11 +421,11 @@ export default function UserContextScreen({ token, API_BASE, onClose }) {
                             } else {
                                 const errorText = await res.text();
                                 console.error('Save location failed:', errorText);
-                                Alert.alert('Error', 'Failed to save location settings');
+                                Alert.alert('Error', `Failed to save location settings (Status ${res.status}): ${errorText}`);
                             }
                         } catch (error) {
                             console.error('Save location error:', error);
-                            Alert.alert('Error', 'Failed to save location');
+                            Alert.alert('Error', `Failed to save location: ${error.message || error}`);
                         }
                     }}
                 />
