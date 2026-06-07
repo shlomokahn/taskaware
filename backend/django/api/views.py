@@ -2138,28 +2138,27 @@ def whatsapp_webhook(request):
                 send_whatsapp_message(sender_number, "❌ *AI failed to parse your voice note.* Please speak clearly and try again.")
                 return Response({"status": "ok"})
                 
-            try:
-                created_titles = []
-                for ai_data in ai_data_list:
-                    due_date = None
-                    due_date_str = ai_data.get("dueDate")
-                    if due_date_str:
-                        due_date = datetime.datetime.fromisoformat(due_date_str.replace("Z", "+00:00"))
-                        
-                    task = Task.objects.create(
-                        user=profile.user,
-                        title=ai_data.get("title") or "Voice Task",
-                        locationQuery=ai_data.get("locationQuery"),
-                        required_context=ai_data.get("requiredContext"),
-                        context_condition=ai_data.get("contextCondition"),
-                        due_date=due_date
-                    )
-                    created_titles.append(task.title)
+            created_titles = []
+            for ai_data in ai_data_list:
+                due_date = None
+                due_date_str = ai_data.get("dueDate")
+                if due_date_str:
+                    due_date = datetime.datetime.fromisoformat(due_date_str.replace("Z", "+00:00"))
                     
-                send_whatsapp_message(sender_number, f"✅ *{len(created_titles)} Task(s) created via Voice!*\n\n" + "\n".join([f"• *{title}*" for title in created_titles]))
-            except Exception as err:
-                print("WhatsApp voice task creation error:", str(err))
-                send_whatsapp_message(sender_number, "❌ *Error creating task from voice note.*")
+                task = Task.objects.create(
+                    user=profile.user,
+                    title=ai_data.get("title") or "Voice Task",
+                    locationQuery=ai_data.get("locationQuery"),
+                    required_context=ai_data.get("requiredContext"),
+                    context_condition=ai_data.get("contextCondition"),
+                    due_date=due_date
+                )
+                created_titles.append(task.title)
+                
+            send_whatsapp_message(sender_number, f"✅ *{len(created_titles)} Task(s) created via Voice!*\n\n" + "\n".join([f"• *{title}*" for title in created_titles]))
+        except Exception as err:
+            print("WhatsApp voice task creation error:", str(err))
+            send_whatsapp_message(sender_number, "❌ *Error creating task from voice note.*")
             
         return Response({"status": "ok"})
         
