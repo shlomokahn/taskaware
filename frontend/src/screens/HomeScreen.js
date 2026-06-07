@@ -168,7 +168,7 @@ export default function HomeScreen({
     return (
         <View style={{ flex: 1 }}>
             <View style={styles.header}>
-                <Text style={styles.brand}>TaskAware</Text>
+                <Text style={styles.brand}>TaskAware 📍</Text>
             </View>
 
             {/* Search Bar */}
