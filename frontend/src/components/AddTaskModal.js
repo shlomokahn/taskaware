@@ -113,11 +113,17 @@ export default function AddTaskModal({ visible, onClose, onAddTask, creating, to
             else if (fileExtension === '3gp') mimeType = 'audio/3gp';
             else if (fileExtension === 'caf') mimeType = 'audio/caf';
 
+            const tzOffset = -new Date().getTimezoneOffset();
+            const diff = tzOffset >= 0 ? '+' : '-';
+            const pad = (num) => String(num).padStart(2, '0');
+            const localISOTime = new Date(Date.now() + tzOffset * 60000).toISOString().slice(0, -5) + diff + pad(Math.floor(Math.abs(tzOffset) / 60)) + ':' + pad(Math.abs(tzOffset) % 60);
+
             formData.append('file', {
                 uri: uri,
                 name: filename,
                 type: mimeType,
             });
+            formData.append('deviceTime', localISOTime);
 
             console.log('Uploading audio to server...');
             const res = await fetch(`${API_BASE}/api/tasks/create-from-voice/`, {

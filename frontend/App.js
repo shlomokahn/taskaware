@@ -278,10 +278,18 @@ function AppContent() {
 
     const fetchLocationFromAI = async (taskTitle) => {
         try {
+            const tzOffset = -new Date().getTimezoneOffset();
+            const diff = tzOffset >= 0 ? '+' : '-';
+            const pad = (num) => String(num).padStart(2, '0');
+            const localISOTime = new Date(Date.now() + tzOffset * 60000).toISOString().slice(0, -5) + diff + pad(Math.floor(Math.abs(tzOffset) / 60)) + ':' + pad(Math.abs(tzOffset) % 60);
+
             const res = await fetch(`${API_BASE}/api/ask-ai/`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Token ${token}` },
-                body: JSON.stringify({ title: taskTitle }),
+                body: JSON.stringify({
+                    title: taskTitle,
+                    deviceTime: localISOTime
+                }),
             });
             if (!res.ok) return null;
             const data = await res.json();
@@ -298,7 +306,16 @@ function AppContent() {
         setCreating(true);
         try {
             const aiData = await fetchLocationFromAI(titleTrimmed);
-            const notifId = reminderDatePassed ? await scheduleNotification(titleTrimmed, reminderDatePassed) : null;
+            
+            let activeReminderDate = reminderDatePassed;
+            if (!activeReminderDate && aiData?.dueDate) {
+                const parsedDate = new Date(aiData.dueDate);
+                if (!isNaN(parsedDate.getTime()) && parsedDate > new Date()) {
+                    activeReminderDate = parsedDate;
+                }
+            }
+
+            const notifId = activeReminderDate ? await scheduleNotification(titleTrimmed, activeReminderDate) : null;
             const payload = {
                 title: titleTrimmed,
                 notificationId: notifId,
@@ -306,8 +323,8 @@ function AppContent() {
                 requiredContext: aiData?.requiredContext || null,
                 contextCondition: aiData?.contextCondition || null,
             };
-            if (reminderDatePassed) {
-                payload.dueDate = reminderDatePassed.toISOString();
+            if (activeReminderDate) {
+                payload.dueDate = activeReminderDate.toISOString();
             }
             const res = await fetch(`${API_BASE}/api/tasks/`, {
                 method: 'POST',

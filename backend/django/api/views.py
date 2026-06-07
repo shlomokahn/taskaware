@@ -638,8 +638,9 @@ class TaskViewSet(viewsets.ModelViewSet):
         try:
             audio_bytes = file_obj.read()
             mime_type = file_obj.content_type or 'audio/mp4'
+            device_time = request.data.get('deviceTime')
             
-            ai_data = parse_voice_message_with_ai(audio_bytes, mime_type=mime_type)
+            ai_data = parse_voice_message_with_ai(audio_bytes, mime_type=mime_type, device_time=device_time)
             if not ai_data or not ai_data.get('title'):
                 return Response({'error': 'AI failed to parse the voice recording'}, status=status.HTTP_422_UNPROCESSABLE_ENTITY)
                 
@@ -748,12 +749,14 @@ def infer_context(request):
 @permission_classes([IsAuthenticated])
 def ask_ai(request):
     title = request.data.get('title')
+    device_time = request.data.get('deviceTime')
 
     if not title:
         return Response({"error": "חסר שם משימה"}, status=400)
 
     try:
         client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
+        current_time_str = device_time if device_time else timezone.now().isoformat()
 
         prompt = f"""You are a smart assistant for a task management app. The user will give you a task description in Hebrew or English.
 Analyze it and return a valid JSON object ONLY. Do not write any markdown formatting, do not write ```json ... ```, do not write explanations.
@@ -762,16 +765,20 @@ Task: '{title}'
 
 JSON Schema:
 {{
-  "locationQuery": "place type in English (e.g., supermarket, pharmacy, bank, post_office, cafe, gym, post_office, bakery, park, library, restaurant)",
+  "locationQuery": "place type in English (e.g., supermarket, pharmacy, bank, post_office, cafe, gym, bakery, park, library, restaurant) or null if none",
   "requiredContext": "context key if mentioned, else null (choices: 'work', 'home', 'school', 'gym')",
-  "contextCondition": "relation to context if mentioned, else null (choices: 'before', 'during', 'after')"
+  "contextCondition": "relation to context if mentioned, else null (choices: 'before', 'during', 'after')",
+  "dueDate": "ISO 8601 date time string if date/time is mentioned relative to current time, else null"
 }}
 
+Current Time Context: {current_time_str}
+
 Examples:
-- "לקנות חלב אחרי העבודה" -> {{"locationQuery": "supermarket", "requiredContext": "work", "contextCondition": "after"}}
-- "לעשות אימון כושר" -> {{"locationQuery": "gym", "requiredContext": "gym", "contextCondition": "during"}}
-- "ללמוד למבחן לפני הלימודים" -> {{"locationQuery": "library", "requiredContext": "school", "contextCondition": "before"}}
-- "לקנות לחם" -> {{"locationQuery": "bakery", "requiredContext": null, "contextCondition": null}}
+- "לקנות חלב אחרי העבודה" -> {{"locationQuery": "supermarket", "requiredContext": "work", "contextCondition": "after", "dueDate": null}}
+- "לעשות אימון כושר" -> {{"locationQuery": "gym", "requiredContext": "gym", "contextCondition": "during", "dueDate": null}}
+- "ללמוד למבחן לפני הלימודים" -> {{"locationQuery": "library", "requiredContext": "school", "contextCondition": "before", "dueDate": null}}
+- "לקנות לחם" -> {{"locationQuery": "bakery", "requiredContext": null, "contextCondition": null, "dueDate": null}}
+- "לחייג לאמא מחר ב10 בבוקר" -> {{"locationQuery": null, "requiredContext": null, "contextCondition": null, "dueDate": "2026-06-08T10:00:00"}}
 """
 
         response = client.models.generate_content(
@@ -792,22 +799,24 @@ Examples:
         required_context = None
         context_condition = None
 
+        due_date_str = None
         try:
             parsed = json.loads(response_text)
             location_query = parsed.get("locationQuery")
             required_context = parsed.get("requiredContext")
             context_condition = parsed.get("contextCondition")
+            due_date_str = parsed.get("dueDate")
         except Exception as json_err:
             print("Failed to parse JSON from Gemini response:", response_text, str(json_err))
             location_query = response_text.replace('.', '').strip()
 
         # Fallback to defaults if empty
-        if not location_query:
+        if not location_query and not required_context and not due_date_str:
             location_query = "supermarket"
 
         try:
             profile = UserProfile.objects.get(user=request.user)
-            if profile.expo_push_token:
+            if profile.expo_push_token and location_query:
                 body_text = f"for the task '{title}', Search the area: {location_query}"
                 if required_context:
                     cond_heb = {"after": "אחרי", "before": "לפני", "during": "בזמן"}.get(context_condition, "")
@@ -816,16 +825,17 @@ Examples:
                 send_expo_push_notification(
                     expo_token=profile.expo_push_token,
                     title="The AI ​​has found a location! 📍",
-                    body=body_message if 'body_message' in locals() else body_text
+                    body=body_text
                 )
         except Exception as e:
             print("Push error in AI:", str(e))
 
-        print(f"AI Answered: locationQuery={location_query}, requiredContext={required_context}, contextCondition={context_condition}")
+        print(f"AI Answered: locationQuery={location_query}, requiredContext={required_context}, contextCondition={context_condition}, dueDate={due_date_str}")
         return Response({
             "locationQuery": location_query,
             "requiredContext": required_context,
-            "contextCondition": context_condition
+            "contextCondition": context_condition,
+            "dueDate": due_date_str
         })
 
     except Exception as e:
@@ -1110,7 +1120,7 @@ def download_telegram_file(file_id):
         return None
 
 
-def parse_voice_message_with_ai(audio_bytes, mime_type='audio/ogg'):
+def parse_voice_message_with_ai(audio_bytes, mime_type='audio/ogg', device_time=None):
     gemini_key = os.environ.get("GEMINI_API_KEY")
     if not gemini_key:
         return None
@@ -1120,6 +1130,7 @@ def parse_voice_message_with_ai(audio_bytes, mime_type='audio/ogg'):
         from google.genai import types
         
         client = genai.Client(api_key=gemini_key)
+        current_time_str = device_time if device_time else timezone.now().isoformat()
         
         prompt = f"""You are a smart assistant for a task management app.
 The user has provided a voice message (audio) in Hebrew or English.
@@ -1136,7 +1147,7 @@ JSON Schema:
   "dueDate": "ISO 8601 date time string if date/time is mentioned relative to current time, else null"
 }}
 
-Current Time Context: {timezone.now().isoformat()}
+Current Time Context: {current_time_str}
 
 Examples:
 - Audio saying "לקנות חלב אחרי העבודה" -> {{"title": "לקנות חלב אחרי העבודה", "locationQuery": "supermarket", "requiredContext": "work", "contextCondition": "after", "dueDate": null}}
